@@ -1,0 +1,105 @@
+import json
+import socket
+import sys
+
+BLUE_BG = "\033[44m"
+WHITE   = "\033[97m"
+RESET   = "\033[0m"
+
+def set_blue():
+    # deixa o “tema” azul (funciona bem no WSL/terminais ANSI)
+    sys.stdout.write(BLUE_BG + WHITE)
+    sys.stdout.flush()
+
+def reset_color():
+    sys.stdout.write(RESET)
+    sys.stdout.flush()
+
+class MTCLI:
+    def __init__(self, host="127.0.0.1", port=9090):
+        self.host = host
+        self.port = port
+        self.sock = None
+        self.f = None
+
+    def connect(self):
+        self.sock = socket.create_connection((self.host, self.port), timeout=2)
+        self.f = self.sock.makefile("rwb")
+
+    def close(self):
+        try:
+            if self.f: self.f.close()
+        finally:
+            if self.sock: self.sock.close()
+
+    def send(self, obj):
+        msg = (json.dumps(obj) + "\n").encode("utf-8")
+        self.f.write(msg)
+        self.f.flush()
+        line = self.f.readline()
+        if not line:
+            return None
+        return json.loads(line.decode("utf-8"))
+
+    def run(self):
+        set_blue()
+        print("MT5 CLI (type: help). Comandos: buy/sell/close/hold/status/quit")
+        print(f"Conectando em {self.host}:{self.port} ...")
+        self.connect()
+        print("Conectado.")
+
+        while True:
+            try:
+                raw = input("mt> ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print("\nsaindo...")
+                break
+
+            if not raw:
+                continue
+
+            parts = raw.split()
+            cmd = parts[0].lower()
+
+            if cmd in ("quit", "exit"):
+                break
+
+            if cmd == "help":
+                print("Exemplos:")
+                print("  buy BTCUSD 0.01")
+                print("  sell BTCUSD 0.01")
+                print("  close BTCUSD")
+                print("  hold BTCUSD")
+                print("  status BTCUSD")
+                continue
+
+            if cmd in ("buy", "sell", "close", "hold"):
+                if len(parts) < 2:
+                    print("faltou SYMBOL (ex: buy BTCUSD 0.01)")
+                    continue
+                symbol = parts[1]
+                action = cmd.upper()
+                req = {"cmd": "cli_push", "symbol": symbol, "action": action}
+                if cmd in ("buy", "sell") and len(parts) >= 3:
+                    req["lots"] = float(parts[2])
+                resp = self.send(req)
+                print(resp)
+                continue
+
+            if cmd == "status":
+                symbol = parts[1] if len(parts) >= 2 else None
+                resp = self.send({"cmd": "status", "symbol": symbol})
+                print(resp)
+                continue
+
+            if cmd == "ping":
+                print(self.send({"cmd": "ping"}))
+                continue
+
+            print("comando desconhecido. digite help.")
+
+        self.close()
+        reset_color()
+
+if __name__ == "__main__":
+    MTCLI().run()
