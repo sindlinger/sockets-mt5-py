@@ -17,6 +17,15 @@ import socket
 import socketserver
 import time
 
+try:
+    import cupy as cp  # type: ignore
+except Exception:
+    cp = None
+try:
+    import numpy as np  # type: ignore
+except Exception:
+    np = None
+
 MODE = os.environ.get("PYBRIDGE_MODE", "server").lower()
 HOST = os.environ.get("PYBRIDGE_HOST", "0.0.0.0")
 PORT = int(os.environ.get("PYBRIDGE_PORT", "9100"))
@@ -128,6 +137,29 @@ def read_message(sock: socket.socket, buf_holder: dict):
     return ("line", line.decode("utf-8", "replace"), None)
 
 
+def _dtype_to_numpy(dtype: str):
+    if dtype == "f64":
+        return np.float64 if np else None
+    if dtype == "f32":
+        return np.float32 if np else None
+    if dtype == "i32":
+        return np.int32 if np else None
+    if dtype == "i16":
+        return np.int16 if np else None
+    if dtype == "u8":
+        return np.uint8 if np else None
+    return None
+
+
+def _fft_mag(arr, use_gpu: bool):
+    if use_gpu and cp is not None:
+        x = cp.asarray(arr)
+        y = cp.abs(cp.fft.fft(x))
+        return cp.asnumpy(y)
+    # fallback CPU
+    return np.abs(np.fft.fft(arr))
+
+
 def handle_frame(frame: bytes, header_text: str) -> bytes:
     parts = header_text.split("|")
     if len(parts) >= 6 and parts[1] == "PY_ARRAY_CALL":
@@ -135,17 +167,34 @@ def handle_frame(frame: bytes, header_text: str) -> bytes:
         dtype = parts[3]
         count = int(parts[4])
         raw_len = int(parts[5])
-        payload = b""
-        if raw_len > 0:
-            payload = frame[-raw_len:]
+        payload = frame[-raw_len:] if raw_len > 0 else b""
+
         LAST_ARRAY["name"] = name
         LAST_ARRAY["dtype"] = dtype
         LAST_ARRAY["count"] = count
         LAST_ARRAY["data"] = payload
-        # ecoa o mesmo array
-        resp_header = f"{parts[0]}|PY_ARRAY_RESP|{name}|{dtype}|{count}|{raw_len}"
+
+        dt = _dtype_to_numpy(dtype)
+        if dt is None or np is None:
+            # ecoa se não suportado
+            resp_header = f"{parts[0]}|PY_ARRAY_RESP|{name}|{dtype}|{count}|{raw_len}"
+            hb = resp_header.encode("utf-8")
+            return b"\xFF" + len(hb).to_bytes(4, "big") + hb + payload
+
+        # converte payload -> numpy
+        arr = np.frombuffer(payload, dtype=dt, count=count)
+
+        if name.startswith("fft"):
+            use_gpu = cp is not None
+            out = _fft_mag(arr, use_gpu)
+            out = out.astype(dt, copy=False)
+        else:
+            out = arr
+
+        out_bytes = out.tobytes()
+        resp_header = f"{parts[0]}|PY_ARRAY_RESP|{name}|{dtype}|{len(out)}|{len(out_bytes)}"
         hb = resp_header.encode("utf-8")
-        return b"\xFF" + len(hb).to_bytes(4, "big") + hb + payload
+        return b"\xFF" + len(hb).to_bytes(4, "big") + hb + out_bytes
     return b""
 
 
