@@ -18,8 +18,6 @@ input int    InpBacklog = 4;
 input int    InpSleepMs = 20;
 input string InpPyHost  = "host.docker.internal,127.0.0.1";
 input int    InpPyPort  = 9100;
-input string InpDefaultSymbol = "EURUSD";
-input string InpDefaultTf     = "H1";
 input bool   InpVerboseLogs = true; // logs ligados por padrão
 
 #include "OficialTelnetServiceSocket/SocketBridge.mqh"
@@ -203,40 +201,6 @@ bool ShouldLogCheck(const string type)
   if(type=="SNAPSHOT_LIST" || type=="DROP_INFO") return false;
   if(type=="TRADE_LIST" || type=="OBJ_LIST") return false;
   return true;
-}
-
-bool ShouldReturnLogs(const string type)
-{
-  return (type=="ATTACH_IND_FULL" || type=="ATTACH_EA_FULL" ||
-          type=="APPLY_TPL" || type=="SAVE_TPL" || type=="RUN_SCRIPT" ||
-          type=="SNAPSHOT_APPLY" || type=="SNAPSHOT_SAVE");
-}
-
-bool LogLineMatches(string line, const string filter)
-{
-  string l = line; StringToLower(l);
-  string f = filter; StringToLower(f);
-  if(f!="" && StringFind(l, f)>=0) return true;
-  if(StringFind(l, "cannot load")>=0) return true;
-  if(StringFind(l, "init failed")>=0) return true;
-  if(StringFind(l, "failed")>=0) return true;
-  if(StringFind(l, "error")>=0) return true;
-  return false;
-}
-
-void AppendLogLines(string &lines[], string &data[], int maxLines, const string filter)
-{
-  int n = ArraySize(lines);
-  if(n<=0) return;
-  int added = 0;
-  for(int i=n-1;i>=0 && added<maxLines;i--)
-  {
-    if(!LogLineMatches(lines[i], filter)) continue;
-    int d = ArraySize(data);
-    ArrayResize(data, d+1);
-    data[d] = "log: " + lines[i];
-    added++;
-  }
 }
 
 // ---- Python bridge frame helpers (0xFF + len + header + payload) ----
@@ -541,10 +505,6 @@ int OnStart()
                 ArrayResize(data, n+1);
                 data[n]="mt5_error: "+err;
               }
-            }
-            if(ShouldReturnLogs(type))
-            {
-              AppendLogLines(lines, data, 40, filter);
             }
           }
         }
