@@ -5,7 +5,8 @@ from collections import defaultdict, deque
 import socketserver
 
 HOST = "127.0.0.1"
-PORT = 9090
+# Agora aponta para o gateway único (9095).
+PORT = 9095
 
 lock = threading.Lock()
 
