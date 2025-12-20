@@ -13,19 +13,22 @@
 
 #include "..\\..\\Services\\OficialTelnetServiceSocket\\SocketBridge.mqh"
 
-#define FFT_N 256
-
+input int    InpN    = 256;
+input bool   InpHalf = false;
+input bool   InpLog  = false;
+input bool   InpNorm = false;
+input string InpWindow = "hann"; // hann|hamming|blackman|"" (none)
+input bool   InpNewBarOnly = true;
 input string InpHost = "127.0.0.1";
 input int    InpPort = 9090;
-input bool   InpNewBarOnly = true;
 
 static double Buf[];
 static datetime last_bar = 0;
 static bool g_wsaInit = false;
 
-struct DblBuf
+struct OneD
 {
-  double v[FFT_N];
+  double v;
 };
 
 bool EnsureWSA()
@@ -142,6 +145,47 @@ bool RecvFrame(uint sock, string &header, uchar &payload[])
   return true;
 }
 
+bool DoublesToBytes(const double &arr[], int count, uchar &out[])
+{
+  if(count<=0) { ArrayResize(out,0); return false; }
+  ArrayResize(out, count*8);
+  OneD tmp; uchar b[]; ArrayResize(b,8);
+  for(int i=0;i<count;i++)
+  {
+    tmp.v = arr[i];
+    StructToCharArray(tmp, b);
+    int off=i*8;
+    for(int j=0;j<8;j++) out[off+j]=b[j];
+  }
+  return true;
+}
+
+bool BytesToDoubles(const uchar &in[], int count, double &out[])
+{
+  if(count<=0) return false;
+  if(ArraySize(in) < count*8) return false;
+  ArrayResize(out, count);
+  OneD tmp; uchar b[]; ArrayResize(b,8);
+  for(int i=0;i<count;i++)
+  {
+    int off=i*8;
+    for(int j=0;j<8;j++) b[j]=in[off+j];
+    CharArrayToStruct(tmp, b);
+    out[i]=tmp.v;
+  }
+  return true;
+}
+
+string BuildFftName()
+{
+  string name = "fft";
+  name += "?half=" + (InpHalf?"1":"0");
+  name += "&log=" + (InpLog?"1":"0");
+  name += "&norm=" + (InpNorm?"1":"0");
+  if(InpWindow!="") name += "&win=" + InpWindow;
+  return name;
+}
+
 int OnInit()
 {
   SetIndexBuffer(0, Buf, INDICATOR_DATA);
@@ -160,31 +204,35 @@ int OnCalculate(const int rates_total,
                 const long &volume[],
                 const int &spread[])
 {
-  if(rates_total < FFT_N) return 0;
+  int n = InpN;
+  if(n < 8) n = 8;
+  if(rates_total < n) return 0;
   if(InpNewBarOnly)
   {
     if(time[0]==last_bar) return rates_total;
     last_bar = time[0];
   }
 
-  DblBuf inbuf;
-  ArrayInitialize(inbuf.v, 0);
-  for(int i=0;i<FFT_N;i++) inbuf.v[i]=close[i];
+  double inbuf[];
+  ArrayResize(inbuf, n);
+  for(int i=0;i<n;i++) inbuf[i]=close[i];
 
   uchar raw[];
-  int raw_len = StructToCharArray(inbuf, raw);
+  if(!DoublesToBytes(inbuf, n, raw)) return rates_total;
+  int raw_len = ArraySize(raw);
   if(raw_len<=0) return rates_total;
 
   uint sock=0;
   if(!ConnectService(sock)) return rates_total;
 
   string id = IntegerToString(GetTickCount());
-  string h1 = id+"|SEND_ARRAY|fft|f64|"+IntegerToString(FFT_N)+"|"+IntegerToString(raw_len);
+  string name = BuildFftName();
+  string h1 = id+"|SEND_ARRAY|"+name+"|f64|"+IntegerToString(n)+"|"+IntegerToString(raw_len);
   if(!SendFrame(sock, h1, raw)) { closesocket(sock); return rates_total; }
   string resp;
   if(!RecvLine(sock, resp)) { closesocket(sock); return rates_total; }
 
-  string line = id+"|PY_ARRAY_CALL|fft\n";
+  string line = id+"|PY_ARRAY_CALL|"+name+"\n";
   SendStr(sock, line);
   if(!RecvLine(sock, resp)) { closesocket(sock); return rates_total; }
 
@@ -195,11 +243,21 @@ int OnCalculate(const int rates_total,
   string rh; uchar payload[];
   if(!RecvFrame(sock, rh, payload)) { closesocket(sock); return rates_total; }
 
-  DblBuf outbuf;
-  if(ArraySize(payload) >= FFT_N*8)
+  // parse count from header
+  string hp[]; int hn=StringSplit(rh,'|',hp);
+  int out_count = 0;
+  if(hn>=6) out_count = (int)StringToInteger(hp[4]);
+  if(out_count<=0) out_count = ArraySize(payload)/8;
+
+  double outbuf[];
+  // clear first n to avoid stale values
+  int clearN = MathMin(rates_total, n);
+  for(int i=0;i<clearN;i++) Buf[i]=0.0;
+
+  if(out_count>0 && BytesToDoubles(payload, out_count, outbuf))
   {
-    CharArrayToStruct(outbuf, payload, 0);
-    for(int i=0;i<FFT_N;i++) Buf[i]=outbuf.v[i];
+    int copyN = MathMin(out_count, rates_total);
+    for(int i=0;i<copyN;i++) Buf[i]=outbuf[i];
   }
 
   closesocket(sock);

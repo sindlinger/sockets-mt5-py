@@ -151,12 +151,50 @@ def _dtype_to_numpy(dtype: str):
     return None
 
 
-def _fft_mag(arr, use_gpu: bool):
+def _parse_fft_opts(name: str) -> dict:
+    base, sep, tail = name.partition("?")
+    opts = {"half": False, "log": False, "norm": False, "win": ""}
+    if not tail:
+        return opts
+    for part in tail.replace(";", "&").split("&"):
+        if not part or "=" not in part:
+            continue
+        k, v = part.split("=", 1)
+        k = k.strip().lower()
+        v = v.strip().lower()
+        if k in ("half", "log", "norm"):
+            opts[k] = v in ("1", "true", "yes", "y", "on")
+        elif k == "win":
+            opts[k] = v
+    return opts
+
+
+def _apply_window(arr, win: str):
+    if not win:
+        return arr
+    n = arr.shape[0]
+    if win == "hann":
+        w = np.hanning(n)
+    elif win == "hamming":
+        w = np.hamming(n)
+    elif win == "blackman":
+        w = np.blackman(n)
+    else:
+        return arr
+    return arr * w
+
+
+def _fft_mag(arr, use_gpu: bool, half: bool):
     if use_gpu and cp is not None:
         x = cp.asarray(arr)
-        y = cp.abs(cp.fft.fft(x))
+        if half:
+            y = cp.abs(cp.fft.rfft(x))
+        else:
+            y = cp.abs(cp.fft.fft(x))
         return cp.asnumpy(y)
     # fallback CPU
+    if half:
+        return np.abs(np.fft.rfft(arr))
     return np.abs(np.fft.fft(arr))
 
 
@@ -185,8 +223,16 @@ def handle_frame(frame: bytes, header_text: str) -> bytes:
         arr = np.frombuffer(payload, dtype=dt, count=count)
 
         if name.startswith("fft"):
+            opts = _parse_fft_opts(name)
             use_gpu = cp is not None
-            out = _fft_mag(arr, use_gpu)
+            arr = _apply_window(arr, opts.get("win", ""))
+            out = _fft_mag(arr, use_gpu, opts.get("half", False))
+            if opts.get("norm", False):
+                maxv = float(out.max()) if out.size else 0.0
+                if maxv > 0:
+                    out = out / maxv
+            if opts.get("log", False):
+                out = np.log10(out + 1e-12)
             out = out.astype(dt, copy=False)
         else:
             out = arr
