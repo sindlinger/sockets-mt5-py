@@ -210,17 +210,30 @@ bool ShouldReturnLogs(const string type)
           type=="SNAPSHOT_APPLY" || type=="SNAPSHOT_SAVE");
 }
 
-void AppendLogLines(string &lines[], string &data[], int maxLines)
+bool LogLineMatches(string line, const string filter)
+{
+  string l = line; StringToLower(l);
+  string f = filter; StringToLower(f);
+  if(f!="" && StringFind(l, f)>=0) return true;
+  if(StringFind(l, "cannot load")>=0) return true;
+  if(StringFind(l, "init failed")>=0) return true;
+  if(StringFind(l, "failed")>=0) return true;
+  if(StringFind(l, "error")>=0) return true;
+  return false;
+}
+
+void AppendLogLines(string &lines[], string &data[], int maxLines, const string filter)
 {
   int n = ArraySize(lines);
   if(n<=0) return;
-  int start = n - maxLines;
-  if(start < 0) start = 0;
-  for(int i=start;i<n;i++)
+  int added = 0;
+  for(int i=n-1;i>=0 && added<maxLines;i--)
   {
+    if(!LogLineMatches(lines[i], filter)) continue;
     int d = ArraySize(data);
     ArrayResize(data, d+1);
     data[d] = "log: " + lines[i];
+    added++;
   }
 }
 
@@ -529,7 +542,7 @@ int OnStart()
             }
             if(ShouldReturnLogs(type))
             {
-              AppendLogLines(lines, data, 40);
+              AppendLogLines(lines, data, 40, filter);
             }
           }
         }
