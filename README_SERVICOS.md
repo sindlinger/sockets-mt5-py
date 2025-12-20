@@ -9,7 +9,7 @@
 ## Python
 - **python/gateway_server.py** / **python/mt_bridge_server.py** – gateway single‑port (9095) que **proxy** para o MT5 em 9090.
 - **python/python_bridge_server.py** – “Python‑Bridge”: **server** em 0.0.0.0:9100 (default). Modo gateway opcional com `PYBRIDGE_MODE=gateway`.
-- **cli/cli_unificado.py** – CLI única; transporte socket (default 9095) ou file (cmd_/resp_ legado).
+- **cli/cli_unificado.py** – CLI única; transporte socket (default 9090; gateway 9095 opcional) ou file (cmd_/resp_ legado).
 - (Legados) **test_socket.py**, **bridge_cli_interativo-mt5.py**, **mt_cli.py** – mantidos, mas o CLI unificado substitui.
 
 ## Portas padrão (evitar conflito)
@@ -24,7 +24,7 @@ A lógica de comando fica desacoplada do transporte:
 
 ## Nomes amigáveis
 - “Gateway HUB” → python/gateway_server.py (também python/mt_bridge_server.py) porta 9095
-- “CLI Unificado (CMD MT)” → cli/cli_unificado.py (socket 9095 ou file)
+- “CLI Unificado (CMD MT)” → cli/cli_unificado.py (socket 9090; gateway 9095 opcional) ou file
 - “Python‑Bridge” → python/python_bridge_server.py (server default)
 - Legados: test_socket.py, bridge_cli_interativo-mt5.py, mt_cli.py
 

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 CMD MT – CLI interativo unificado
-- socket (default): host/porta (gateway 127.0.0.1:9095 ou serviço MQL 9090)
+- socket (default): host/porta (serviço MT5 9090; gateway 9095 opcional)
 - file: cmd_*.txt / resp_*.txt (EA CommandListener/OficialTelnetListener)
 
 Comandos:
@@ -138,9 +138,8 @@ def parse_sym_tf(tokens, ctx):
 DEFAULT_SYMBOL = "EURUSD"
 DEFAULT_TF = "H1"
 DEFAULT_EA_BASE_TPL = "Moving Average.tpl"
-DEFAULT_HOSTS = "host.docker.internal,127.0.0.1"
-DEFAULT_PORT = 9095
-CMDMT_HELLO_ENABLED = os.environ.get("CMDMT_HELLO", "1") != "0"
+DEFAULT_HOSTS = "host.docker.internal"
+DEFAULT_PORT = 9090
 CMDMT_HELLO_LINE = os.environ.get("CMDMT_HELLO_LINE", "HELLO CMDMT")
 
 def find_terminal_data_dir():
@@ -510,6 +509,12 @@ class TransportSocket:
         self.host = host
         self.port = port
         self.timeout = timeout
+        env_hello = os.environ.get("CMDMT_HELLO")
+        if env_hello is None:
+            # padrão: sem HELLO quando conecta direto no serviço MT5 (9090)
+            self.send_hello = (self.port != 9090)
+        else:
+            self.send_hello = env_hello != "0"
         # suporte a fallback: "h1,h2;h3"
         self.hosts = []
         if host:
@@ -527,8 +532,8 @@ class TransportSocket:
             for _ in range(3):  # até 3 tentativas em caso de reset/timeout
                 try:
                     with socket.create_connection((host, self.port), timeout=self.timeout) as s:
-                        # handshake (gateway single-port)
-                        if CMDMT_HELLO_ENABLED:
+                        # handshake opcional
+                        if self.send_hello:
                             s.sendall((CMDMT_HELLO_LINE + "\n").encode("utf-8"))
                         s.sendall(line.encode("utf-8"))
                         data = b""
