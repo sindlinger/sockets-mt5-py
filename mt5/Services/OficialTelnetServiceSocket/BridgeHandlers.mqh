@@ -133,10 +133,10 @@ string FindSymbolLike(const string wanted)
 {
   string w = wanted; StringToUpper(w);
   if(w=="") return "";
-  int totalAll = SymbolsTotal(false);
+  int totalAll = SymbolsTotal(true);
   for(int i=0;i<totalAll;i++)
   {
-    string s = SymbolName(i, false);
+    string s = SymbolName(i, true);
     string su = s; StringToUpper(su);
     if(StringFind(su, w)>=0) return s;
   }
