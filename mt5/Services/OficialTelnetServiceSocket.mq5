@@ -16,7 +16,7 @@
 input int  InpPort    = 9090;
 input int  InpBacklog = 4;
 input int  InpSleepMs = 20;
-input bool   InpUseGateway  = true; // true: MT5 conecta no gateway; false: MT5 escuta em 9090
+input bool   InpUseGateway  = false; // true: MT5 conecta no gateway; false: MT5 escuta em 9090
 input string InpGatewayHost = "host.docker.internal,127.0.0.1";
 input int    InpGatewayPort = 9095;
 input string InpGatewayTerm = "__END__";
@@ -34,23 +34,11 @@ void Log(const string txt)
   if(InpVerboseLogs) Print("[SvcSocket] ", txt);
 }
 
-void LogGwThrottle(const string txt, const int ms=5000)
-{
-  if(!InpVerboseLogs) return;
-  ulong now = GetTickCount();
-  if(now - g_lastGwLog >= (ulong)ms)
-  {
-    g_lastGwLog = now;
-    Print("[SvcSocket] ", txt);
-  }
-}
-
 uint g_listen = 0;
 uint g_client = 0;
 bool g_wsaInit = false;
 // cliente python
 uint g_pySock = 0;
-ulong g_lastGwLog = 0;
 
 // armazenamento simples do último array recebido
 string g_arr_name="";
@@ -179,7 +167,6 @@ bool ConnectGateway()
   string hlist[]; int hn=StringSplit(hosts, ',', hlist);
   if(hn<=0) { ArrayResize(hlist,1); hlist[0]=hosts; hn=1; }
 
-  LogGwThrottle("gateway mode ON; tentando conectar...");
   for(int i=0;i<hn;i++)
   {
     string h = hlist[i]; StringTrimLeft(h); StringTrimRight(h);
@@ -207,7 +194,6 @@ bool ConnectGateway()
     }
     closesocket(g_client); g_client=0;
   }
-  LogGwThrottle("gateway indisponível");
   return false;
 }
 
@@ -371,10 +357,6 @@ void CloseSockets()
 
 int OnStart()
 {
-  if(InpUseGateway)
-  {
-    if(InpVerboseLogs) Log("gateway mode ON");
-  }
   if(!InpUseGateway)
   {
     if(!StartServer())
@@ -404,16 +386,12 @@ int OnStart()
     if(g_client!=0)
     {
       string line; bool isFrame=false;
-    if(!RecvMessage(g_client, isFrame, line))
-    {
-      // loga apenas uma vez por conexão
-      if(InpVerboseLogs)
+      if(!RecvMessage(g_client, isFrame, line))
       {
-        if(InpUseGateway) Log("gateway disconnected");
-        else Log("client done (connection closed)");
+        // loga apenas uma vez por conexão
+        if(InpVerboseLogs) Log("client done (connection closed)");
+        closesocket(g_client); g_client=0; continue;
       }
-      closesocket(g_client); g_client=0; continue;
-    }
 
       if(isFrame)
       {
