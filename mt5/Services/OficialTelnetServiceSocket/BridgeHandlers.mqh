@@ -125,7 +125,7 @@ int BuildParams(string &pstr, MqlParam &outParams[])
 bool EnsureSymbol(const string sym)
 {
   if(SymbolSelect(sym, true)) return true;
-  Print("[bridge] SymbolSelect failed for ", sym);
+  Print("[SvcSocket] SymbolSelect failed for ", sym);
   return false;
 }
 
@@ -140,6 +140,15 @@ string FindSymbolLike(const string wanted)
     string su = s; StringToUpper(su);
     if(StringFind(su, w)>=0) return s;
   }
+  return "";
+}
+
+string FirstAvailableSymbol()
+{
+  int total = SymbolsTotal(true);
+  if(total>0) return SymbolName(0, true);
+  total = SymbolsTotal(false);
+  if(total>0) return SymbolName(0, false);
   return "";
 }
 
@@ -167,7 +176,16 @@ bool ResolveSymbolTf(string &sym, string &tfstr, ENUM_TIMEFRAMES &tf)
         sym = cur;
         if(!EnsureSymbol(sym)) return false;
       }
-      else return false;
+      else
+      {
+        string first = FirstAvailableSymbol();
+        if(first!="")
+        {
+          sym = first;
+          if(!EnsureSymbol(sym)) return false;
+        }
+        else return false;
+      }
     }
   }
   tfstr = TfToString(tf);
