@@ -16,7 +16,7 @@
 input int  InpPort    = 9090;
 input int  InpBacklog = 4;
 input int  InpSleepMs = 20;
-input bool   InpUseGateway  = true;
+input bool   InpUseGateway  = false; // true: MT5 conecta no gateway; false: MT5 escuta em 9090
 input string InpGatewayHost = "host.docker.internal,127.0.0.1";
 input int    InpGatewayPort = 9095;
 input string InpGatewayTerm = "__END__";

@@ -17,7 +17,7 @@ import socket
 import socketserver
 import time
 
-MODE = os.environ.get("PYBRIDGE_MODE", "gateway").lower()
+MODE = os.environ.get("PYBRIDGE_MODE", "server").lower()
 HOST = os.environ.get("PYBRIDGE_HOST", "0.0.0.0")
 PORT = int(os.environ.get("PYBRIDGE_PORT", "9100"))
 GW_HOSTS = os.environ.get("GW_HOSTS", "host.docker.internal,127.0.0.1")

@@ -55,12 +55,11 @@ Notes
 
 Python bridge (MT5 -> PY)
 -------------------------
-Gateway mode: MT5 connects to the HUB (porta única) and forwards PY_ARRAY_CALL
-frames through it. For text PY_CALL payloads, MT5 sends a line prefixed with
-`PY|` so the gateway can route to Python. Python connects to the HUB and replies
-on the same socket.
+Default mode: MT5 opens a dedicated, duplex connection to Python (port 9100).
 
-Legacy mode: MT5 opens a dedicated, duplex connection to Python (port 9100).
+Optional gateway mode: MT5 connects to the HUB (porta única) and forwards
+PY_ARRAY_CALL frames through it. For text PY_CALL payloads, MT5 sends a line
+prefixed with `PY|` so the gateway can route to Python.
 Command: PY_ARRAY_CALL
 
 Flow:
