@@ -203,6 +203,27 @@ bool ShouldLogCheck(const string type)
   return true;
 }
 
+bool ShouldReturnLogs(const string type)
+{
+  return (type=="ATTACH_IND_FULL" || type=="ATTACH_EA_FULL" ||
+          type=="APPLY_TPL" || type=="SAVE_TPL" || type=="RUN_SCRIPT" ||
+          type=="SNAPSHOT_APPLY" || type=="SNAPSHOT_SAVE");
+}
+
+void AppendLogLines(string &lines[], string &data[], int maxLines)
+{
+  int n = ArraySize(lines);
+  if(n<=0) return;
+  int start = n - maxLines;
+  if(start < 0) start = 0;
+  for(int i=start;i<n;i++)
+  {
+    int d = ArraySize(data);
+    ArrayResize(data, d+1);
+    data[d] = "log: " + lines[i];
+  }
+}
+
 // ---- Python bridge frame helpers (0xFF + len + header + payload) ----
 bool PySendFrame(uint sock, const string header, uchar &payload[])
 {
@@ -505,6 +526,10 @@ int OnStart()
                 ArrayResize(data, n+1);
                 data[n]="mt5_error: "+err;
               }
+            }
+            if(ShouldReturnLogs(type))
+            {
+              AppendLogLines(lines, data, 40);
             }
           }
         }
