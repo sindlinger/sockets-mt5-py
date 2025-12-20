@@ -23,7 +23,7 @@ input string InpDefaultTf     = "H1";
 input bool   InpVerboseLogs = true; // logs ligados por padrão
 
 #include "OficialTelnetServiceSocket/SocketBridge.mqh"
-#include "OficialTelnetServiceSocket/BridgeHandlers.mqh"
+#include "OficialTelnetServiceSocket/ServiceHandlers.mqh"
 
 string LISTENER_VERSION_SOCKET = "svc-socket-1.1.0";
 

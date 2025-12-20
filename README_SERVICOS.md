@@ -3,7 +3,7 @@
 ## MT5 (MQL5)
 - **OficialTelnetServiceSocket.mq5** (Service) – **escuta TCP em 9090** (modo padrão). Mostra “listening 9090” no Journal quando inicia.
 - Suporta `PY_CALL` / `PY_ARRAY_CALL` direto para Python (porta 9100) e frames binários SEND_ARRAY/GET_ARRAY.
-- Handlers em `mt5/Services/OficialTelnetServiceSocket/BridgeHandlers.mqh` (MQH em subpasta; MQ5 fica em `mt5/Services/`).
+- Handlers em `mt5/Services/OficialTelnetServiceSocket/ServiceHandlers.mqh` (MQH em subpasta; MQ5 fica em `mt5/Services/`).
 - **OficialTelnetListener.mq5** (Expert, opcional) – modo por arquivos/pipe (não socket).
 
 ## Python
@@ -19,7 +19,7 @@
 
 ## Como acoplar outras camadas (HTTP/websocket/pipe)
 A lógica de comando fica desacoplada do transporte:
-- No serviço MQL, a Dispatch dos comandos está em `MQL5/Services/OficialTelnetServiceSocket/BridgeHandlers.mqh` (camada lógica) e o MQ5 fica em `MQL5/Services/OficialTelnetServiceSocket.mq5`.
+- No serviço MQL, a Dispatch dos comandos está em `MQL5/Services/OficialTelnetServiceSocket/ServiceHandlers.mqh` (camada lógica) e o MQ5 fica em `MQL5/Services/OficialTelnetServiceSocket.mq5`.
 - Nos clientes Python, o mapeamento de comandos está no CLI unificado; trocar o transporte significa alterar a função de envio/recepção mantendo os mesmos nomes de comandos.
 
 ## Nomes amigáveis

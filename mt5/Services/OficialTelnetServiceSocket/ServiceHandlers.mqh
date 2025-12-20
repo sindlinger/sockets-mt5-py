@@ -1,4 +1,4 @@
-// BridgeHandlers.mqh
+// ServiceHandlers.mqh
 // Utilidades + handlers + Dispatch, sem OnStart (para ser usado por pipe e socket)
 #ifndef __BRIDGE_HANDLERS_MQH__
 #define __BRIDGE_HANDLERS_MQH__
