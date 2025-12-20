@@ -129,21 +129,46 @@ bool EnsureSymbol(const string sym)
   return false;
 }
 
+string FindSymbolLike(const string wanted)
+{
+  string w = wanted; StringToUpper(w);
+  if(w=="") return "";
+  int totalAll = SymbolsTotal(false);
+  for(int i=0;i<totalAll;i++)
+  {
+    string s = SymbolName(i, false);
+    string su = s; StringToUpper(su);
+    if(StringFind(su, w)>=0) return s;
+  }
+  return "";
+}
+
 bool ResolveSymbolTf(string &sym, string &tfstr, ENUM_TIMEFRAMES &tf)
 {
-  if(sym=="") sym = ChartSymbol(0);
+  if(sym=="") sym = InpDefaultSymbol;
+  if(tfstr=="") tfstr = InpDefaultTf;
   tf = TfFromString(tfstr);
   if(tf==0) tf = (ENUM_TIMEFRAMES)ChartPeriod(0);
+  if(sym=="")
+  {
+    string cur = ChartSymbol(0);
+    if(cur!="") sym = cur;
+  }
   if(sym=="" || tf==0) return false;
   if(!EnsureSymbol(sym))
   {
-    string cur = ChartSymbol(0);
-    if(cur!="" && cur!=sym)
+    string alt = FindSymbolLike(sym);
+    if(alt!="") sym = alt;
+    if(!EnsureSymbol(sym))
     {
-      sym = cur;
-      if(!EnsureSymbol(sym)) return false;
+      string cur = ChartSymbol(0);
+      if(cur!="" && cur!=sym)
+      {
+        sym = cur;
+        if(!EnsureSymbol(sym)) return false;
+      }
+      else return false;
     }
-    else return false;
   }
   tfstr = TfToString(tf);
   return (tf!=0 && sym!="");

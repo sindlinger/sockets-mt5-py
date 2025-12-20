@@ -18,6 +18,8 @@ input int    InpBacklog = 4;
 input int    InpSleepMs = 20;
 input string InpPyHost  = "host.docker.internal,127.0.0.1";
 input int    InpPyPort  = 9100;
+input string InpDefaultSymbol = "EURUSD";
+input string InpDefaultTf     = "H1";
 input bool   InpVerboseLogs = true; // logs ligados por padrão
 
 #include "OficialTelnetServiceSocket/SocketBridge.mqh"
