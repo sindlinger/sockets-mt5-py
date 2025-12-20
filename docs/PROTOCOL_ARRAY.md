@@ -49,7 +49,7 @@ Notes
 * This is NOT JSON. It is a binary frame protocol.
 * The service stores the last received array in memory and can return it.
 * See MQL5 implementation:
-  mt5/Services/OficialTelnetServiceSocket/OficialTelnetServiceSocket.mq5
+  mt5/Services/OficialTelnetServiceSocket.mq5
 * Example client:
   examples/mt5_frames.py
 

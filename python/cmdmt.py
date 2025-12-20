@@ -317,7 +317,7 @@ def run_mt5_compile_service():
     if not term:
         print("não encontrei o Terminal do MT5. Defina CMDMT_MT5_DATA ou MT5_DATA_DIR.")
         return False
-    svc = term / "MQL5" / "Services" / "OficialTelnetServiceSocket" / "OficialTelnetServiceSocket.mq5"
+    svc = term / "MQL5" / "Services" / "OficialTelnetServiceSocket.mq5"
     if not svc.exists():
         print("serviço não encontrado. Informe o caminho completo.")
         return False

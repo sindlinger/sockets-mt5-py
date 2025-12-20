@@ -67,4 +67,18 @@ foreach ($kv in $links.GetEnumerator()) {
   cmd.exe /c "mklink /J `"$link`" `"$target`""
 }
 
+# Copia o serviço .mq5 para a raiz de Services (MetaEditor compila melhor assim)
+$svcSrc = Join-Path $SourceRoot "Services\\OficialTelnetServiceSocket.mq5"
+$svcDst = Join-Path $Mql5 "Services\\OficialTelnetServiceSocket.mq5"
+if (Test-Path $svcSrc) {
+  if (Test-Path $svcDst) {
+    $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $backup = $svcDst + ".bak-" + $stamp
+    Move-Item $svcDst $backup
+    Write-Host "Backup: $svcDst -> $backup" -ForegroundColor Yellow
+  }
+  Copy-Item $svcSrc $svcDst -Force
+  Write-Host "Serviço copiado para Services root." -ForegroundColor Green
+}
+
 Write-Host "Junctions criados com sucesso." -ForegroundColor Green
