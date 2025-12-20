@@ -36,7 +36,7 @@ encoding on the client side (use little-endian to match MQL5 on Windows).
 Example: SEND_ARRAY (Python pseudo-code)
 ----------------------------------------
   header = f"{id}|SEND_ARRAY|prices|f64|{count}|{raw_len}"
-  frame  = b"\\xFF" + len(header).to_bytes(4, "big") + header.encode("utf-8")
+  frame  = b"\xFF" + len(header).to_bytes(4, "big") + header.encode("utf-8")
   sock.sendall(frame)
   sock.sendall(payload_bytes)
 
@@ -55,12 +55,12 @@ Notes
 
 Python bridge (MT5 -> PY)
 -------------------------
-Default mode: MT5 opens a dedicated, duplex connection to Python (port 9100).
+Gateway mode: MT5 connects to the HUB (porta única) and forwards PY_ARRAY_CALL
+frames through it. For text PY_CALL payloads, MT5 sends a line prefixed with
+`PY|` so the gateway can route to Python. Python connects to the HUB and replies
+on the same socket.
 
-Optional gateway mode: MT5 connects to the HUB (porta única) and forwards
-PY_ARRAY_CALL frames through it. For text PY_CALL payloads, MT5 sends a line
-prefixed with `PY|` so the gateway can route to Python.
-Command: PY_ARRAY_CALL
+Legacy mode: MT5 opens a dedicated, duplex connection to Python (port 9100).
 
 Flow:
   1) Client sends SEND_ARRAY to MT5 (store last array in MT5 service)
