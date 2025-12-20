@@ -3,7 +3,6 @@
 ## MT5 (MQL5)
 - **OficialTelnetServiceSocket.mq5** (Service) – **escuta TCP em 9090** (modo padrão). Mostra “listening 9090” no Journal quando inicia.
 - Suporta `PY_CALL` / `PY_ARRAY_CALL` direto para Python (porta 9100) e frames binários SEND_ARRAY/GET_ARRAY.
-- **Modo gateway (opcional)**: `InpUseGateway=true` faz o MT5 conectar no gateway (porta 9095). Não é o padrão.
 - Handlers em `mt5/Services/OficialTelnetServiceSocket/BridgeHandlers.mqh` (MQH em subpasta; MQ5 fica em `mt5/Services/`).
 - **OficialTelnetListener.mq5** (Expert, opcional) – modo por arquivos/pipe (não socket).
 

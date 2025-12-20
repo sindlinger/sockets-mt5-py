@@ -13,15 +13,11 @@
 #property service
 #property strict
 
-input int  InpPort    = 9090;
-input int  InpBacklog = 4;
-input int  InpSleepMs = 20;
-input bool   InpUseGateway  = false; // true: MT5 conecta no gateway; false: MT5 escuta em 9090
-input string InpGatewayHost = "host.docker.internal,127.0.0.1";
-input int    InpGatewayPort = 9095;
-input string InpGatewayTerm = "__END__";
-input string InpPyHost = "host.docker.internal,127.0.0.1";
-input int    InpPyPort = 9100;
+input int    InpPort    = 9090;
+input int    InpBacklog = 4;
+input int    InpSleepMs = 20;
+input string InpPyHost  = "host.docker.internal,127.0.0.1";
+input int    InpPyPort  = 9100;
 input bool   InpVerboseLogs = true; // logs ligados por padrão
 
 #include "OficialTelnetServiceSocket/SocketBridge.mqh"
@@ -66,7 +62,6 @@ bool SendStr(uint sock, const string s)
 
 void SendResp(uint sock, string resp)
 {
-  if(InpUseGateway) resp += InpGatewayTerm + "\n";
   SendStr(sock, resp);
 }
 
@@ -158,51 +153,8 @@ bool EnsureWSA()
   return true;
 }
 
-bool ConnectGateway()
-{
-  if(g_client!=0) return true;
-  if(!EnsureWSA()) return false;
-  string hosts = InpGatewayHost;
-  if(hosts=="") hosts="127.0.0.1";
-  string hlist[]; int hn=StringSplit(hosts, ',', hlist);
-  if(hn<=0) { ArrayResize(hlist,1); hlist[0]=hosts; hn=1; }
-
-  for(int i=0;i<hn;i++)
-  {
-    string h = hlist[i]; StringTrimLeft(h); StringTrimRight(h);
-    if(h=="") continue;
-    g_client = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if(g_client==0) return false;
-    uint ipHost=0x7F000001;
-    if(h!="127.0.0.1")
-    {
-      int a,b,c,d;
-      string partsIP[];
-      if(StringSplit(h,'.',partsIP)==4)
-      {
-        a=(int)StringToInteger(partsIP[0]); b=(int)StringToInteger(partsIP[1]);
-        c=(int)StringToInteger(partsIP[2]); d=(int)StringToInteger(partsIP[3]);
-        ipHost = ((uint)a<<24)|((uint)b<<16)|((uint)c<<8)|(uint)d;
-      }
-    }
-    uchar sa[]; MakeSockAddr(sa, (ushort)InpGatewayPort, ipHost);
-    if(connect(g_client, sa, ArraySize(sa))==0)
-    {
-      SendStr(g_client, "HELLO MT5\n");
-      if(InpVerboseLogs) Log("gateway connected");
-      return true;
-    }
-    closesocket(g_client); g_client=0;
-  }
-  return false;
-}
-
 bool ConnectPy()
 {
-  if(InpUseGateway)
-  {
-    return (g_client!=0);
-  }
   if(g_pySock!=0) return true;
   // suporta fallback em lista "host1,host2"
   string hosts = InpPyHost;
@@ -357,31 +309,18 @@ void CloseSockets()
 
 int OnStart()
 {
-  if(!InpUseGateway)
+  if(!StartServer())
   {
-    if(!StartServer())
-    {
-      Print("Socket service failed on port ", InpPort);
-      CloseSockets(); return(INIT_FAILED);
-    }
+    Print("Socket service failed on port ", InpPort);
+    CloseSockets(); return(INIT_FAILED);
   }
 
   while(!IsStopped())
   {
-    if(InpUseGateway)
+    if(g_client==0)
     {
-      if(g_client==0)
-      {
-        if(!ConnectGateway()) { Sleep(InpSleepMs); continue; }
-      }
-    }
-    else
-    {
-      if(g_client==0)
-      {
-        g_client = AcceptClient();
-        if(g_client!=0 && InpVerboseLogs) Log("client connected");
-      }
+      g_client = AcceptClient();
+      if(g_client!=0 && InpVerboseLogs) Log("client connected");
     }
     if(g_client!=0)
     {
@@ -461,36 +400,18 @@ int OnStart()
           {
             if(type=="PY_CONNECT")
             {
-              if(InpUseGateway)
-              {
-                if(g_client==0) { msg="gw_conn"; ok=false; }
-                else
-                {
-                  string ping = "{\"cmd\":\"ping\"}";
-                  SendStr(g_client, "PY|"+ping+"\n");
-                  string pyresp;
-                  if(RecvLine(g_client, pyresp) && StringFind(pyresp, "\"pong\"")>=0)
-                  { msg="py_connected"; ok=true; }
-                  else { msg="py_conn_fail"; ok=false; }
-                }
-              }
-              else
-              {
-                if(ConnectPy()) { msg="py_connected"; ok=true; }
-                else { msg="py_conn_fail"; ok=false; }
-              }
+              if(ConnectPy()) { msg="py_connected"; ok=true; }
+              else { msg="py_conn_fail"; ok=false; }
             }
             else if(type=="PY_DISCONNECT")
             {
-              if(!InpUseGateway) ClosePy();
-              msg="py_disconnected"; ok=true;
+              ClosePy(); msg="py_disconnected"; ok=true;
             }
             else if(type=="PY_ARRAY_CALL")
             {
               if(!ConnectPy()) { msg="py_conn"; ok=false; }
               else
               {
-                uint psock = InpUseGateway ? g_client : g_pySock;
                 string name = (ArraySize(params)>0 && params[0]!="") ? params[0] : g_arr_name;
                 string dtype = g_arr_dtype;
                 int count = g_arr_count;
@@ -502,16 +423,16 @@ int OnStart()
                 else
                 {
                   string header = id+"|PY_ARRAY_CALL|"+name+"|"+dtype+"|"+IntegerToString(count)+"|"+IntegerToString(raw_len);
-                  if(!PySendFrame(psock, header, g_arr_data))
+                  if(!PySendFrame(g_pySock, header, g_arr_data))
                   {
-                    msg="py_send_fail"; ok=false; if(!InpUseGateway) ClosePy();
+                    msg="py_send_fail"; ok=false; ClosePy();
                   }
                   else
                   {
                     string h=""; uchar payload[];
-                    if(!PyRecvFrame(psock, h, payload))
+                    if(!PyRecvFrame(g_pySock, h, payload))
                     {
-                      msg="py_noresp"; ok=false; if(!InpUseGateway) ClosePy();
+                      msg="py_noresp"; ok=false; ClosePy();
                     }
                     else
                     {
@@ -542,12 +463,10 @@ int OnStart()
               if(!ConnectPy()) { msg="py_conn"; ok=false; }
               else
               {
-                uint psock = InpUseGateway ? g_client : g_pySock;
                 string payload = (ArraySize(params)>0)?params[0]:"";
-                if(InpUseGateway) SendStr(psock, "PY|"+payload+"\n");
-                else SendStr(psock, payload+"\n");
+                SendStr(g_pySock, payload+"\n");
                 string pyresp;
-                if(RecvLine(psock, pyresp))
+                if(RecvLine(g_pySock, pyresp))
                 {
                   ArrayResize(data,1); data[0]=pyresp;
                   msg="py_ok"; ok=true;
@@ -555,7 +474,7 @@ int OnStart()
                 }
                 else
                 {
-                  msg="py_noresp"; ok=false; if(!InpUseGateway) ClosePy();
+                  msg="py_noresp"; ok=false; ClosePy();
                 }
               }
             }
