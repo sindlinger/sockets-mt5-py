@@ -36,7 +36,7 @@ Comandos:
   glist [PREFIX [LIMIT]]
   compile ARQUIVO|NOME
   compile here
-  py PAYLOAD               (PY_CALL)
+  py JSON                  (PY_CALL)
   cmd TYPE [PARAMS...]     (envia TYPE direto)
   selftest [full]          (smoke test do serviço)
   raw <linha>
@@ -559,6 +559,13 @@ class TransportSocket:
 
 # ------------------- Parsing de comandos -------------------
 def parse_user_line(line: str, ctx):
+    line_strip = line.strip()
+    if line_strip.lower().startswith("py "):
+        payload = line_strip[3:].strip()
+        if not payload:
+            print("uso: py <json>")
+            return None
+        return "PY_CALL", [payload]
     try:
         parts = shlex.split(line.strip())
     except Exception:
@@ -785,7 +792,7 @@ def parse_user_line(line: str, ctx):
             "  obj_create TYPE NAME TIME PRICE TIME2 PRICE2\n"
             "  screenshot SYMBOL TF FILE WIDTH [HEIGHT]\n"
             "  screenshot_sweep ... | drop_info ...\n"
-            "  py PAYLOAD                   (PY_CALL)\n"
+            "  py JSON                      (PY_CALL)\n"
             "  compile ARQUIVO|NOME         (compila .mq5 via MetaEditor)\n"
             "  compile here                 (compila OficialTelnetServiceSocket.mq5)\n"
             "  cmd TYPE [PARAMS...]         (envia TYPE direto)\n"
