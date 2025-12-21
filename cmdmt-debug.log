@@ -1,0 +1,22 @@
+[DEBUG_TPL] stub exists: /mnt/c/Users/pichau/AppData/Roaming/MetaQuotes/Terminal/EDC2DBD7187032A6326EC5B7406951FA/MQL5/Profiles/Templates/Stub.tpl
+[DEBUG_TPL] attach ea name=DukaEA path=Experts\DukaEA.ex5 insert=<window>
+[DEBUG_TPL] template written: /mnt/c/Users/pichau/AppData/Roaming/MetaQuotes/Terminal/EDC2DBD7187032A6326EC5B7406951FA/MQL5/Profiles/Templates/DukaEA.tpl
+[DEBUG_TPL] verify block ok=False
+[DEBUG_TPL] send ATTACH_EA_FULL tpl=DukaEA.tpl
+[DEBUG_TPL] stub exists: /mnt/c/Users/pichau/AppData/Roaming/MetaQuotes/Terminal/EDC2DBD7187032A6326EC5B7406951FA/MQL5/Profiles/Templates/Stub.tpl
+[DEBUG_TPL] attach ea name=DukaEA path=Experts\DukaEA.ex5 insert=<window>
+[DEBUG_TPL] template written: /mnt/c/Users/pichau/AppData/Roaming/MetaQuotes/Terminal/EDC2DBD7187032A6326EC5B7406951FA/MQL5/Profiles/Templates/DukaEA.tpl
+[DEBUG_TPL] verify block ok=False
+[DEBUG_TPL] send ATTACH_EA_FULL tpl=DukaEA.tpl
+[DEBUG_TPL] stub exists: /mnt/c/Users/pichau/AppData/Roaming/MetaQuotes/Terminal/EDC2DBD7187032A6326EC5B7406951FA/MQL5/Profiles/Templates/Stub.tpl
+[DEBUG_TPL] attach ea name=DukaEA path=Experts\DukaEA.ex5 insert=<window>
+[DEBUG_TPL] template written: /mnt/c/Users/pichau/AppData/Roaming/MetaQuotes/Terminal/EDC2DBD7187032A6326EC5B7406951FA/MQL5/Profiles/Templates/DukaEA.tpl
+[DEBUG_TPL] verify block ok=True
+[DEBUG_TPL] expert block:\n<expert>
+name=DukaEA
+path=Experts\DukaEA.ex5
+expertmode=5
+<inputs>
+</inputs>
+</expert>
+[DEBUG_TPL] send ATTACH_EA_FULL tpl=DukaEA.tpl
