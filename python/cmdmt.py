@@ -39,6 +39,9 @@ Comandos:
   glist [PREFIX [LIMIT]]
   compile ARQUIVO|NOME
   compile here
+  tester [--root PATH] [--ini FILE] [--timeout SEC] [--width W --height H] [--minimized|--headless] (default 640x480)
+  run NOME --ind|--ea [SYMBOL] [TF] [3 dias] (tester simples)
+  logs [last|ARQUIVO.log] [N] (listar/mostrar logs do run)
   py PAYLOAD               (PY_CALL)
   cmd TYPE [PARAMS...]     (envia TYPE direto)
   selftest [full]          (smoke test do serviço)
@@ -53,7 +56,7 @@ import os
 import random
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 import subprocess
 import socket
@@ -61,6 +64,7 @@ import shlex
 import re
 import shutil
 import signal
+from collections import OrderedDict
 
 BLUE_BG = "\033[44m"
 WHITE   = "\033[97m"
@@ -358,6 +362,964 @@ def run_mt5_compile_all_services():
     ok1 = run_mt5_compile_service()
     ok2 = run_mt5_compile_pyservice()
     return ok1 and ok2
+
+def _read_text_auto(path: Path):
+    data = path.read_bytes()
+    encoding = "utf-8"
+    bom = b""
+    if data.startswith(b"\xff\xfe"):
+        encoding = "utf-16-le"
+        bom = b"\xff\xfe"
+        data = data[2:]
+    elif data.startswith(b"\xfe\xff"):
+        encoding = "utf-16-be"
+        bom = b"\xfe\xff"
+        data = data[2:]
+    txt = data.decode(encoding, "ignore")
+    return txt, encoding, bom
+
+def _default_ini_map():
+    # mapeamento base (chaves do exemplo) – cada chave pode ser sobrescrita via --set Section.Key=Valor
+    m = OrderedDict()
+    m["Common"] = OrderedDict([
+        ("Login", ""),
+        ("Password", ""),
+        ("Server", ""),
+        ("CertPassword", ""),
+        ("ProxyEnable", "0"),
+        ("ProxyType", "0"),
+        ("ProxyAddress", ""),
+        ("ProxyLogin", ""),
+        ("ProxyPassword", ""),
+        ("KeepPrivate", "1"),
+        ("NewsEnable", "1"),
+        ("CertInstall", "1"),
+        ("MQL5Login", ""),
+        ("MQL5Password", ""),
+    ])
+    m["Charts"] = OrderedDict([
+        ("ProfileLast", ""),
+        ("MaxBars", "50000"),
+        ("PrintColor", "0"),
+        ("SaveDeleted", "1"),
+    ])
+    m["Experts"] = OrderedDict([
+        ("AllowLiveTrading", "0"),
+        ("AllowDllImport", "0"),
+        ("Enabled", "1"),
+        ("Account", "0"),
+        ("Profile", "0"),
+    ])
+    m["Objects"] = OrderedDict([
+        ("ShowPropertiesOnCreate", "0"),
+        ("SelectOneClick", "0"),
+        ("MagnetSens", "10"),
+    ])
+    m["StartUp"] = OrderedDict([
+        ("Expert", ""),
+        ("ExpertParameters", ""),
+        ("Script", ""),
+        ("ScriptParameters", ""),
+        ("Symbol", ""),
+        ("Period", ""),
+        ("Template", ""),
+        ("ShutdownTerminal", "1"),
+    ])
+    m["Email"] = OrderedDict([
+        ("Enable", "0"),
+        ("Server", ""),
+        ("Auth", ""),
+        ("Login", ""),
+        ("Password", ""),
+        ("From", ""),
+        ("To", ""),
+    ])
+    m["Tester"] = OrderedDict([
+        ("Expert", ""),
+        ("ExpertParameters", ""),
+        ("Symbol", ""),
+        ("Period", ""),
+        ("Login", ""),
+        ("Deposit", ""),
+        ("Currency", ""),
+        ("Leverage", ""),
+        ("Model", "0"),
+        ("ExecutionMode", "1"),
+        ("Optimization", "0"),
+        ("OptimizationCriterion", "0"),
+        ("FromDate", ""),
+        ("ToDate", ""),
+        ("ForwardMode", "0"),
+        ("ForwardDate", ""),
+        ("Report", ""),
+        ("ReplaceReport", "1"),
+        ("Visual", "0"),
+        ("UseLocal", "1"),
+        ("UseRemote", "0"),
+        ("UseCloud", "0"),
+        ("Port", ""),
+        ("ShutdownTerminal", "1"),
+    ])
+    return m
+
+def _parse_ini_to_map(path: Path):
+    base = _default_ini_map()
+    try:
+        txt, _, _ = _read_text_auto(path)
+    except Exception:
+        return base
+    section = None
+    for raw in txt.splitlines():
+        line = raw.strip()
+        if not line or line.startswith(";") or line.startswith("#"):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            section = line[1:-1].strip()
+            if section not in base:
+                base[section] = OrderedDict()
+            continue
+        if "=" in line and section:
+            k, v = line.split("=", 1)
+            base.setdefault(section, OrderedDict())[k.strip()] = v.strip()
+    return base
+
+def _apply_overrides(ini_map, overrides):
+    for sec, key, val in overrides:
+        if not sec or not key:
+            continue
+        if sec not in ini_map:
+            ini_map[sec] = OrderedDict()
+        ini_map[sec][key] = val
+    return ini_map
+
+def _ini_map_to_text(ini_map):
+    lines = []
+    for sec, items in ini_map.items():
+        lines.append(f"[{sec}]")
+        for k, v in items.items():
+            lines.append(f"{k}={v}")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+def _write_text_auto(path: Path, text: str, encoding: str, bom: bytes):
+    if encoding.startswith("utf-16"):
+        data = text.encode(encoding, "ignore")
+        if bom:
+            data = bom + data
+        path.write_bytes(data)
+    else:
+        path.write_text(text, encoding="utf-8", errors="ignore")
+
+def _list_windows_user_dirs():
+    if os.name == "nt":
+        base = Path(os.environ.get("USERPROFILE", "C:\\Users\\Public")).parent
+    else:
+        base = Path("/mnt/c/Users")
+    if not base.exists():
+        return []
+    skip = {"Public", "Default", "Default User", "All Users", "desktop.ini"}
+    users = []
+    for p in base.iterdir():
+        if p.is_dir() and p.name not in skip:
+            users.append(p)
+    return users
+
+def _walk_depth(root: Path, max_depth: int = 3):
+    root = Path(root)
+    for path, dirs, files in os.walk(root):
+        depth = len(Path(path).relative_to(root).parts)
+        if depth > max_depth:
+            dirs[:] = []
+            continue
+        yield Path(path), files
+
+def _find_terminal_exe(root: Path):
+    root = Path(root)
+    if not root.exists():
+        return None
+    direct = root / "terminal64.exe"
+    if direct.exists():
+        return direct
+    direct = root / "terminal.exe"
+    if direct.exists():
+        return direct
+    for path, files in _walk_depth(root, max_depth=4):
+        if "terminal64.exe" in files:
+            return path / "terminal64.exe"
+        if "terminal.exe" in files:
+            return path / "terminal.exe"
+    return None
+
+def _find_ini(root: Path, ini_hint=None):
+    root = Path(root)
+    if ini_hint:
+        p = Path(maybe_wslpath(ini_hint))
+        if not p.is_absolute():
+            p = root / ini_hint
+        if p.exists():
+            return p
+    preferred = [
+        "tester.ini",
+        "tester_run.ini",
+        "tester_indicator.ini",
+        "test.ini",
+        "config.ini",
+        "terminal.ini",
+    ]
+    for name in preferred:
+        p = root / name
+        if p.exists():
+            return p
+    # fallback: first ini in root
+    for p in root.glob("*.ini"):
+        return p
+    return None
+
+def _find_rach_root():
+    env = os.environ.get("CMDMT_RACH_DIR") or os.environ.get("CMDMT_MT5_TESTER_ROOT")
+    if env:
+        p = Path(maybe_wslpath(env))
+        if p.exists():
+            return p
+    names = ["rach1", "rach"]
+    candidates = []
+    # C:\rach1 or /mnt/c/rach1
+    if os.name == "nt":
+        base = Path("C:\\")
+    else:
+        base = Path("/mnt/c")
+    for name in names:
+        p = base / name
+        if p.exists():
+            candidates.append(p)
+    # user folders
+    for user in _list_windows_user_dirs():
+        for name in names:
+            p = user / name
+            if p.exists():
+                candidates.append(p)
+        for sub in ("Desktop", "Documents", "Downloads"):
+            for name in names:
+                p = user / sub / name
+                if p.exists():
+                    candidates.append(p)
+    # prefer ones with terminal.exe
+    for p in candidates:
+        if _find_terminal_exe(p):
+            return p
+    if candidates:
+        return max(candidates, key=lambda x: x.stat().st_mtime)
+    # fallback: procura terminals locais em mt5-shellscripts
+    local_base = Path("/mnt/c/mql/mt5-shellscripts")
+    if local_base.exists():
+        for name in ("Terminal", "metatrader5"):
+            p = local_base / name
+            if _find_terminal_exe(p):
+                return p
+    return None
+
+def _patch_ini_window(src: Path, width=None, height=None):
+    if not width and not height:
+        return src
+    txt, enc, bom = _read_text_auto(src)
+    lines = txt.splitlines()
+    width = width or 1024
+    height = height or 720
+    keys = {
+        "WindowLeft": "0",
+        "WindowTop": "0",
+        "WindowWidth": str(width),
+        "WindowHeight": str(height),
+        "Maximized": "0",
+    }
+    out = []
+    seen = {k: False for k in keys}
+    in_common = False
+    injected = False
+    for ln in lines:
+        stripped = ln.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            if in_common and not injected:
+                for k, v in keys.items():
+                    if not seen[k]:
+                        out.append(f"{k}={v}")
+                        seen[k] = True
+                injected = True
+            in_common = (stripped[1:-1].strip().lower() == "common")
+            out.append(ln)
+            continue
+        if "=" in stripped and not stripped.startswith(";") and not stripped.startswith("#"):
+            k, v = stripped.split("=", 1)
+            k = k.strip()
+            if k in keys:
+                out.append(f"{k}={keys[k]}")
+                seen[k] = True
+                continue
+        out.append(ln)
+    if in_common and not injected:
+        for k, v in keys.items():
+            if not seen[k]:
+                out.append(f"{k}={v}")
+                seen[k] = True
+        injected = True
+    if not injected:
+        out.append("[Common]")
+        for k, v in keys.items():
+            if not seen[k]:
+                out.append(f"{k}={v}")
+                seen[k] = True
+    dst = src.with_name("cmdmt_tester.ini")
+    _write_text_auto(dst, "\n".join(out) + "\n", enc, bom)
+    return dst
+
+def _tail_lines(path: Path, n: int = 200):
+    try:
+        txt, _, _ = _read_text_auto(path)
+    except Exception:
+        return []
+    lines = txt.splitlines()
+    return lines[-n:]
+
+def _latest_file(dir_path: Path, exts=None, after_ts=None):
+    if not dir_path.exists():
+        return None
+    files = []
+    for p in dir_path.iterdir():
+        if not p.is_file():
+            continue
+        if exts and p.suffix.lower() not in exts:
+            continue
+        if after_ts and p.stat().st_mtime < after_ts - 1:
+            continue
+        files.append(p)
+    if not files:
+        return None
+    return max(files, key=lambda p: p.stat().st_mtime)
+
+def _print_block(title: str, lines):
+    if not lines:
+        return
+    print(title)
+    for ln in lines:
+        print("  " + ln)
+
+def _ensure_run_logs_dir():
+    root = _find_repo_root(Path.cwd())
+    if not root:
+        root = Path.cwd()
+    out = root / "run_logs"
+    out.mkdir(parents=True, exist_ok=True)
+    return out
+
+def _append_run_log(path: Path, title: str, lines):
+    with path.open("a", encoding="utf-8") as f:
+        f.write(title + "\n")
+        for ln in lines:
+            f.write(ln + "\n")
+        f.write("\n")
+
+def _list_run_logs(limit=20):
+    run_dir = _ensure_run_logs_dir()
+    logs = sorted(run_dir.glob("run_*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+    print(f"run_logs: {run_dir}")
+    for p in logs[:limit]:
+        print(f"  {p.name}")
+
+def _show_run_log(name=None, tail=200):
+    run_dir = _ensure_run_logs_dir()
+    if name and name != "last":
+        path = run_dir / name
+    else:
+        logs = sorted(run_dir.glob("run_*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if not logs:
+            print("run_logs vazio")
+            return
+        path = logs[0]
+    lines = _tail_lines(path, tail)
+    _print_block(f"log: {path}", lines)
+
+def _normalize_prog_name(name):
+    name = name.strip().strip('"').strip("'")
+    return name.replace("/", "\\")
+
+def _strip_ext(name):
+    low = name.lower()
+    if low.endswith(".ex5") or low.endswith(".mq5"):
+        return name[:-4]
+    return name
+
+def _find_prog_in_dir(base, name):
+    base = Path(base)
+    if not base.exists():
+        return None, None
+    name = _normalize_prog_name(name)
+    rel = _strip_ext(name)
+    rel_path = Path(*rel.split("\\"))
+    for ext in (".ex5", ".mq5"):
+        cand = base / (str(rel_path) + ext)
+        if cand.exists():
+            return cand, rel
+    target = rel_path.name
+    for ext in (".ex5", ".mq5"):
+        for p in base.rglob(target + ext):
+            if p.is_file():
+                rel2 = str(p.relative_to(base)).replace("/", "\\")
+                rel2 = _strip_ext(rel2)
+                return p, rel2
+    return None, None
+
+def _find_repo_root(start=None):
+    p = Path(start or Path(__file__).resolve()).resolve()
+    for _ in range(12):
+        if (p / ".git").exists():
+            return p
+        if p.parent == p:
+            break
+        p = p.parent
+    return None
+
+def _find_prog_in_repo(kind, name):
+    repo = _find_repo_root(Path.cwd())
+    if not repo:
+        return None, None
+    for root in repo.rglob("MQL5"):
+        base = root / kind
+        if not base.exists():
+            continue
+        src, rel2 = _find_prog_in_dir(base, name)
+        if src:
+            return src, rel2
+    return None, None
+
+def _ensure_dirs(data_dir):
+    for sub in ("MQL5/Profiles/Tester", "MQL5/Experts", "MQL5/Indicators"):
+        (Path(data_dir) / sub).mkdir(parents=True, exist_ok=True)
+
+def _write_indicator_stub_set(data_dir, indicator_rel):
+    tester_dir = Path(data_dir) / "MQL5" / "Profiles" / "Tester"
+    tester_dir.mkdir(parents=True, exist_ok=True)
+    set_path = tester_dir / "IndicatorStub.set"
+    txt = f"IndicatorPath={indicator_rel}\nIndicatorParams=\n"
+    set_path.write_text(txt, encoding="utf-8")
+    return set_path
+
+def _ensure_indicator_stub(data_dir):
+    _ensure_dirs(data_dir)
+    dst = Path(data_dir) / "MQL5" / "Experts" / "IndicatorStub.ex5"
+    if dst.exists():
+        return dst
+    repo = _find_repo_root(Path.cwd())
+    if repo:
+        src = repo / "IndicatorStub.ex5"
+        if src.exists():
+            shutil.copy2(src, dst)
+            return dst
+    return None
+
+def _is_existing_path(p: str) -> bool:
+    try:
+        return Path(maybe_wslpath(p)).exists()
+    except Exception:
+        return False
+
+def _safe_symlink(src: Path, dst: Path) -> bool:
+    try:
+        if dst.exists():
+            return True
+        os.symlink(str(src), str(dst))
+        return True
+    except Exception:
+        return False
+
+def _compile_mq5_path(src: Path) -> bool:
+    compiler = find_mt5_compiler()
+    if not compiler:
+        print("ERROR MetaEditor/mt5-compile não encontrado.")
+        return False
+    log_path = Path(os.getcwd()) / "mt5-compile.log"
+    win_src = to_windows_path(str(src))
+    win_log = to_windows_path(str(log_path))
+    cmd = [compiler, f"/compile:{win_src}", f"/log:{win_log}"]
+    try:
+        subprocess.run(cmd, check=False)
+    except Exception as e:
+        print(f"falha ao executar compilador: {e}")
+        return False
+    return True
+
+def _prepare_external_file(src_path: Path, data_dir: Path, target_kind: str):
+    # target_kind: "Indicators" or "Experts"
+    cleanup = []
+    src_path = Path(src_path)
+    if src_path.is_dir():
+        print("ERROR passe um arquivo .ex5 ou .mq5, não pasta")
+        return None, cleanup
+    base = Path(data_dir) / "MQL5" / target_kind
+    base.mkdir(parents=True, exist_ok=True)
+    # prefer .ex5 if available
+    if src_path.suffix.lower() == ".mq5":
+        ex5 = src_path.with_suffix(".ex5")
+        if ex5.exists():
+            src_path = ex5
+    rel_name = _strip_ext(src_path.name)
+    dst = base / src_path.name
+    if _safe_symlink(src_path, dst):
+        if dst.is_symlink():
+            cleanup.append(dst)
+    else:
+        # fallback: copia se não puder linkar
+        shutil.copy2(src_path, dst)
+    # if mq5, compile in place
+    if dst.suffix.lower() == ".mq5":
+        okc = _compile_mq5_path(dst)
+        ex5 = dst.with_suffix(".ex5")
+        if not okc or not ex5.exists():
+            print("ERROR compilação falhou para " + str(dst))
+            return None, cleanup
+    return rel_name, cleanup
+
+def _parse_days(tokens):
+    num_words = {
+        "um": 1, "uma": 1,
+        "dois": 2, "duas": 2,
+        "tres": 3, "três": 3,
+        "quatro": 4,
+        "cinco": 5,
+        "seis": 6,
+        "sete": 7,
+        "oito": 8,
+        "nove": 9,
+        "dez": 10,
+    }
+    for i, t in enumerate(tokens):
+        low = t.lower()
+        m = re.match(r"(\d+)\s*d", low)
+        if m:
+            return int(m.group(1))
+        if low.endswith("dias") or low.endswith("dia"):
+            num = re.sub(r"\D", "", low)
+            if num.isdigit():
+                return int(num)
+            if i > 0:
+                prev = tokens[i-1].lower()
+                if prev.isdigit():
+                    return int(prev)
+                if prev in num_words:
+                    return num_words[prev]
+        if low in num_words:
+            if i+1 < len(tokens) and tokens[i+1].lower().startswith("dia"):
+                return num_words[low]
+    return None
+
+def _parse_dates(tokens):
+    dates = [t for t in tokens if re.match(r"^\d{4}\.\d{2}\.\d{2}$", t)]
+    if len(dates) >= 2:
+        return dates[0], dates[1]
+    return None, None
+
+def run_simple(tokens, ctx):
+    if not tokens:
+        print("uso: run NOME --ind|--ea [SYMBOL] [TF] [3 dias]")
+        return
+    name_parts = []
+    rest = []
+    for t in tokens:
+        if t.startswith("--"):
+            rest.append(t)
+        else:
+            name_parts.append(t)
+    mode = None
+    for t in rest:
+        low = t.lower()
+        if low in ("--ind", "--indicator"):
+            mode = "ind"
+        if low in ("--ea", "--expert"):
+            mode = "ea"
+    if not name_parts:
+        print("uso: run NOME --ind|--ea [SYMBOL] [TF] [3 dias]")
+        return
+    if mode is None:
+        print("erro: informe se é indicador ou expert usando --ind ou --ea")
+        return
+    sym = None
+    tf = None
+    if len(name_parts) >= 2 and is_tf(name_parts[-1]):
+        tf = name_parts[-1]
+        sym = name_parts[-2]
+        name_parts = name_parts[:-2]
+    elif len(name_parts) >= 1 and is_tf(name_parts[-1]):
+        tf = name_parts[-1]
+        sym = ctx.get("symbol")
+        name_parts = name_parts[:-1]
+    if not sym:
+        sym = ctx.get("symbol") or DEFAULT_SYMBOL
+    if not tf:
+        tf = ctx.get("tf") or DEFAULT_TF
+    prog_name = " ".join(name_parts).strip()
+    if not prog_name:
+        print("uso: run NOME --ind|--ea [SYMBOL] [TF] [3 dias]")
+        return
+
+    from_d, to_d = _parse_dates(tokens)
+    if not from_d or not to_d:
+        ndays = _parse_days(tokens) or 3
+        today = datetime.now().date()
+        start = today - timedelta(days=ndays)
+        from_d = start.strftime("%Y.%m.%d")
+        to_d = today.strftime("%Y.%m.%d")
+
+    root = _find_rach_root()
+    if not root:
+        root = Path("/mnt/c/mql/mt5-shellscripts/Terminal")
+    data_dir = root
+    _ensure_dirs(data_dir)
+
+    ind_src = ind_rel = exp_src = exp_rel = None
+    cleanup = []
+    if mode != "ea":
+        ind_src, ind_rel = _find_prog_in_dir(Path(data_dir) / "MQL5" / "Indicators", prog_name)
+    if mode != "ind":
+        exp_src, exp_rel = _find_prog_in_dir(Path(data_dir) / "MQL5" / "Experts", prog_name)
+    # caminho externo (qualquer pasta)
+    if _is_existing_path(prog_name):
+        src_path = Path(maybe_wslpath(prog_name))
+        if mode == "ind":
+            ind_rel, cleanup = _prepare_external_file(src_path, data_dir, "Indicators")
+        else:
+            exp_rel, cleanup = _prepare_external_file(src_path, data_dir, "Experts")
+    if not ind_src and not exp_src:
+        if mode != "ea":
+            src, rel = _find_prog_in_repo("Indicators", prog_name)
+            if src:
+                dst = Path(data_dir) / "MQL5" / "Indicators" / Path(*rel.split("\\"))
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                dst = dst.with_suffix(src.suffix)
+                shutil.copy2(src, dst)
+                ind_src, ind_rel = dst, _strip_ext(rel)
+        if mode != "ind" and not ind_src:
+            src, rel = _find_prog_in_repo("Experts", prog_name)
+            if src:
+                dst = Path(data_dir) / "MQL5" / "Experts" / Path(*rel.split("\\"))
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                dst = dst.with_suffix(src.suffix)
+                shutil.copy2(src, dst)
+                exp_src, exp_rel = dst, _strip_ext(rel)
+
+    overrides = []
+    if mode == "ind" and not ind_rel:
+        print("ERROR indicador não encontrado (use nome/caminho correto)")
+        return
+    if mode == "ea" and not exp_rel:
+        print("ERROR expert não encontrado (use nome/caminho correto)")
+        return
+
+    if ind_rel and not exp_rel:
+        stub = _ensure_indicator_stub(data_dir)
+        if not stub:
+            print("ERROR IndicatorStub.ex5 não encontrado")
+            return
+        _write_indicator_stub_set(data_dir, ind_rel)
+        overrides.append(("Tester", "Expert", "IndicatorStub.ex5"))
+        overrides.append(("Tester", "ExpertParameters", "IndicatorStub.set"))
+    elif exp_rel:
+        overrides.append(("Tester", "Expert", exp_rel))
+    else:
+        overrides.append(("Tester", "Expert", _strip_ext(prog_name)))
+
+    overrides += [
+        ("Tester", "Symbol", sym),
+        ("Tester", "Period", tf),
+        ("Tester", "FromDate", from_d),
+        ("Tester", "ToDate", to_d),
+        ("Tester", "ShutdownTerminal", "1"),
+    ]
+
+    tester_tokens = [
+        "--root", str(root),
+        "--timeout", "60",
+        "--minimized",
+    ]
+    for sec, key, val in overrides:
+        tester_tokens += ["--set", f"{sec}.{key}={val}"]
+    run_mt5_tester(tester_tokens)
+    # cleanup symlinks
+    for p in cleanup:
+        try:
+            if p.is_symlink():
+                p.unlink()
+        except Exception:
+            pass
+
+def run_mt5_tester(tokens):
+    # parse tokens
+    opts = {
+        "root": None,
+        "ini": None,
+        "timeout": 60,
+        "width": 640,
+        "height": 480,
+        "headless": False,
+        "minimized": False,
+        "portable": None,
+        "logtail": 200,
+        "screenshot": None,
+        "buffers": True,
+        "set": [],
+    }
+    i = 0
+    while i < len(tokens):
+        t = tokens[i]
+        if t.startswith("--") and "=" in t:
+            key, val = t[2:].split("=", 1)
+            tokens = tokens[:i] + [f"--{key}", val] + tokens[i+1:]
+            continue
+        if t in ("--root", "-r"):
+            i += 1; opts["root"] = tokens[i] if i < len(tokens) else None
+        elif t in ("--ini", "-i"):
+            i += 1; opts["ini"] = tokens[i] if i < len(tokens) else None
+        elif t in ("--timeout", "-t"):
+            i += 1
+            if i < len(tokens) and tokens[i].isdigit():
+                opts["timeout"] = int(tokens[i])
+        elif t == "--width":
+            i += 1
+            if i < len(tokens) and tokens[i].isdigit():
+                opts["width"] = int(tokens[i])
+        elif t == "--height":
+            i += 1
+            if i < len(tokens) and tokens[i].isdigit():
+                opts["height"] = int(tokens[i])
+        elif t == "--headless":
+            opts["headless"] = True
+        elif t == "--minimized":
+            opts["minimized"] = True
+        elif t == "--portable":
+            opts["portable"] = True
+        elif t == "--no-portable":
+            opts["portable"] = False
+        elif t == "--logtail":
+            i += 1
+            if i < len(tokens) and tokens[i].isdigit():
+                opts["logtail"] = int(tokens[i])
+        elif t == "--screenshot":
+            i += 1; opts["screenshot"] = tokens[i] if i < len(tokens) else None
+        elif t in ("--set", "-S"):
+            i += 1
+            if i < len(tokens):
+                opts["set"].append(tokens[i])
+        elif t == "--no-buffers":
+            opts["buffers"] = False
+        elif t == "--expert":
+            i += 1
+            if i < len(tokens):
+                opts["set"].append(f"Tester.Expert={tokens[i]}")
+        elif t == "--expertparams":
+            i += 1
+            if i < len(tokens):
+                opts["set"].append(f"Tester.ExpertParameters={tokens[i]}")
+        elif t == "--symbol":
+            i += 1
+            if i < len(tokens):
+                opts["set"].append(f"Tester.Symbol={tokens[i]}")
+        elif t == "--period":
+            i += 1
+            if i < len(tokens):
+                opts["set"].append(f"Tester.Period={tokens[i]}")
+        elif t == "--from":
+            i += 1
+            if i < len(tokens):
+                opts["set"].append(f"Tester.FromDate={tokens[i]}")
+        elif t == "--to":
+            i += 1
+            if i < len(tokens):
+                opts["set"].append(f"Tester.ToDate={tokens[i]}")
+        elif t == "--report":
+            i += 1
+            if i < len(tokens):
+                opts["set"].append(f"Tester.Report={tokens[i]}")
+        elif t == "--shutdown":
+            i += 1
+            if i < len(tokens):
+                opts["set"].append(f"Tester.ShutdownTerminal={tokens[i]}")
+        else:
+            if "=" in t:
+                opts["set"].append(t)
+        i += 1
+
+    root = Path(maybe_wslpath(opts["root"])) if opts["root"] else _find_rach_root()
+    if not root or not root.exists():
+        print("ERROR rach_root_not_found (use --root PATH or CMDMT_RACH_DIR)")
+        return False
+
+    exe = _find_terminal_exe(root)
+    if not exe:
+        print("ERROR terminal_not_found (não achei terminal64.exe em rach)")
+        return False
+
+    ini = _find_ini(root, opts["ini"])
+    # monta ini a partir de template + overrides
+    overrides = []
+    env_set = os.environ.get("CMDMT_TESTER_SET", "")
+    if env_set:
+        for part in env_set.split(";"):
+            if part.strip():
+                opts["set"].append(part.strip())
+    for item in opts["set"]:
+        if "=" not in item:
+            continue
+        left, val = item.split("=", 1)
+        sec = None; key = None
+        if "." in left:
+            sec, key = left.split(".", 1)
+        elif ":" in left:
+            sec, key = left.split(":", 1)
+        else:
+            sec, key = "Tester", left
+        overrides.append((sec.strip(), key.strip(), val.strip()))
+
+    if ini:
+        ini_map = _parse_ini_to_map(ini)
+        base_dir = ini.parent
+    else:
+        ini_map = _default_ini_map()
+        base_dir = Path.cwd()
+
+    ini_map = _apply_overrides(ini_map, overrides)
+
+    # força shutdown se não foi definido explicitamente
+    for sec in ("StartUp", "Tester"):
+        if sec not in ini_map:
+            ini_map[sec] = OrderedDict()
+        if "ShutdownTerminal" not in ini_map[sec] or str(ini_map[sec]["ShutdownTerminal"]).strip() == "":
+            ini_map[sec]["ShutdownTerminal"] = "1"
+
+    tester_expert = str(ini_map.get("Tester", {}).get("Expert", "")).strip()
+    startup_expert = str(ini_map.get("StartUp", {}).get("Expert", "")).strip()
+    if not tester_expert and not startup_expert:
+        print("ERROR Tester.Expert vazio (use --expert ou --set Tester.Expert=...)")
+        return False
+
+    ini_out = base_dir / "cmdmt_tester.ini"
+    ini_text = _ini_map_to_text(ini_map)
+    _write_text_auto(ini_out, ini_text, "utf-8", b"")
+
+    ini_use = _patch_ini_window(ini_out, opts["width"], opts["height"])
+
+    # detect data dir (portable)
+    data_dir = root if (root / "MQL5").exists() else root
+    # allow DataPath override in ini
+    try:
+        ini_txt, _, _ = _read_text_auto(ini_use)
+        for ln in ini_txt.splitlines():
+            if ln.strip().lower().startswith("datapath="):
+                data_dir = Path(maybe_wslpath(ln.split("=", 1)[1].strip()))
+                break
+    except Exception:
+        pass
+
+    cmd = [to_windows_path(str(exe)), f"/config:{to_windows_path(str(ini_use))}"]
+    if opts["portable"] is True or ((root / "MQL5").exists() and opts["portable"] is not False):
+        cmd.append("/portable")
+
+    start_ts = time.time()
+    print(f"tester: root={root}")
+    print(f"tester: exe={exe}")
+    print(f"tester: ini={ini_use}")
+    try:
+        if os.name == "nt":
+            startupinfo = None
+            creationflags = 0
+            if opts["headless"] or opts["minimized"]:
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = 0 if opts["headless"] else 2
+                if opts["headless"]:
+                    creationflags = subprocess.CREATE_NO_WINDOW
+            proc = subprocess.Popen(cmd, startupinfo=startupinfo, creationflags=creationflags)
+        else:
+            proc = subprocess.Popen(cmd)
+    except Exception as e:
+        print(f"ERROR start_failed {e}")
+        return False
+
+    try:
+        proc.wait(timeout=opts["timeout"])
+    except subprocess.TimeoutExpired:
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+        try:
+            proc.wait(timeout=5)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+    # logs + save to run_logs
+    run_dir = _ensure_run_logs_dir()
+    run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_log = run_dir / f"run_{run_stamp}.log"
+    logs_dir = data_dir / "MQL5" / "Logs"
+    tlogs_dir = data_dir / "MQL5" / "Tester" / "Logs"
+    latest_term = _latest_file(logs_dir, exts={".log"}, after_ts=start_ts)
+    latest_test = _latest_file(tlogs_dir, exts={".log"}, after_ts=start_ts)
+    if latest_term:
+        lines = _tail_lines(latest_term, opts["logtail"])
+        _print_block(f"terminal log: {latest_term}", lines)
+        _append_run_log(run_log, f"terminal log: {latest_term}", lines)
+    if latest_test:
+        lines = _tail_lines(latest_test, opts["logtail"])
+        _print_block(f"tester log: {latest_test}", lines)
+        _append_run_log(run_log, f"tester log: {latest_test}", lines)
+
+    # buffers (heurística: linhas com 'buffer' nos logs)
+    if opts["buffers"]:
+        for log in (latest_test, latest_term):
+            if not log:
+                continue
+            lines = _tail_lines(log, max(200, opts["logtail"]))
+            hits = [ln for ln in lines if re.search(r"buffer", ln, re.I)]
+            if hits:
+                _print_block(f"buffers em {log.name}", hits[-50:])
+                _append_run_log(run_log, f"buffers em {log.name}", hits[-50:])
+
+    # screenshot: procura imagens recentes
+    shot_dirs = [data_dir / "MQL5" / "Tester" / "Files", data_dir / "MQL5" / "Files"]
+    latest_shot = None
+    for d in shot_dirs:
+        shot = _latest_file(d, exts={".png", ".jpg", ".jpeg"}, after_ts=start_ts)
+        if shot and (not latest_shot or shot.stat().st_mtime > latest_shot.stat().st_mtime):
+            latest_shot = shot
+    # dados (buffers) em arquivo, se existirem
+    data_dir_t = data_dir / "MQL5" / "Tester" / "Files"
+    data_latest = _latest_file(data_dir_t, exts={".txt", ".csv"}, after_ts=start_ts)
+    if data_latest:
+        lines = _tail_lines(data_latest, 50)
+        _print_block(f"data file: {data_latest}", lines)
+        _append_run_log(run_log, f"data file: {data_latest}", lines)
+    if latest_shot:
+        print(f"screenshot: {latest_shot}")
+        _append_run_log(run_log, "screenshot: " + str(latest_shot), [])
+        # copia screenshot para run_logs
+        try:
+            dst = run_dir / f"run_{run_stamp}{latest_shot.suffix.lower()}"
+            shutil.copy2(latest_shot, dst)
+            print(f"run_screenshot: {dst}")
+        except Exception as e:
+            print(f"ERROR screenshot_copy {e}")
+        if opts["screenshot"]:
+            try:
+                dst = Path(maybe_wslpath(opts["screenshot"]))
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(latest_shot, dst)
+                print(f"screenshot_copy: {dst}")
+            except Exception as e:
+                print(f"ERROR screenshot_copy {e}")
+    else:
+        print("screenshot: não encontrado (use ChartScreenShot no EA/indicador ou TestVisualization)")
+    return True
 
 def _split_hosts(hosts: str):
     return [h.strip() for h in hosts.replace(";", ",").split(",") if h.strip()]
@@ -905,6 +1867,14 @@ def parse_user_line(line: str, ctx):
         target = " ".join(parts[1:])
         return "COMPILE", [target]
 
+    if head in ("run", "rodar"):
+        return "RUN_SIMPLE", parts[1:]
+    if head == "logs":
+        return "RUN_LOGS", parts[1:]
+
+    if head in ("tester", "mt5tester", "testermt5"):
+        return "TESTER_RUN", parts[1:]
+
     if head in ("pyservice", "pysvc", "pyserv"):
         if len(parts) < 2:
             print("uso: pyservice <ping|cmd|raw|compile> [args...]"); return None
@@ -1165,6 +2135,12 @@ def parse_user_line(line: str, ctx):
             "  pybridge start|stop|status\n"
             "  pybridge ping [HOST] [PORT]\n"
             "  pybridge ensure [HOST] [PORT]\n"
+            "  tester [--root PATH] [--ini FILE] [--timeout SEC] [--width W --height H]\n"
+            "         [--headless|--minimized] [--portable|--no-portable] [--logtail N] [--screenshot PATH]\n"
+            "         [--set Section.Key=Val ...] (ex: --set Tester.Expert=Examples\\\\MACD\\\\MACD Sample)\n"
+            "         (default size: 640x480, ShutdownTerminal=1)\n"
+            "  run NOME --ind|--ea [SYMBOL] [TF] [3 dias] (tester simples)\n"
+            "  logs [last|ARQUIVO.log] [N] (listar/mostrar logs do run)\n"
             "  cmd TYPE [PARAMS...]         (envia TYPE direto)\n"
             "  PY_CONNECT | PY_DISCONNECT   (via cmd TYPE ...)\n"
             "  PY_ARRAY_CALL [NAME]         (via cmd TYPE ...)\n"
@@ -1757,6 +2733,20 @@ def main():
                 return
             if cmd_type == "COMPILE_ALL":
                 run_mt5_compile_all_services()
+                return
+            if cmd_type == "RUN_SIMPLE":
+                run_simple(params, ctx)
+                return
+            if cmd_type == "RUN_LOGS":
+                if not params:
+                    _list_run_logs()
+                else:
+                    name = params[0]
+                    tail = int(params[1]) if len(params) >= 2 and params[1].isdigit() else 200
+                    _show_run_log(name, tail)
+                return
+            if cmd_type == "TESTER_RUN":
+                run_mt5_tester(params)
                 return
             if cmd_type == "PYSERVICE_PING":
                 host = params[0] if params else DEFAULT_PY_SERVICE_HOSTS
