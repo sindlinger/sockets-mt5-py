@@ -73,13 +73,18 @@ int ParseParams(string &pstr, string &keys[], string &vals[])
     string kv[]; int c=StringSplit(pairs[i], '=', kv);
     if(c==2)
     {
-      keys[count]=kv[0]; vals[count]=kv[1];
+      string k=kv[0]; string v=kv[1];
+      StringTrimLeft(k); StringTrimRight(k);
+      StringTrimLeft(v); StringTrimRight(v);
+      keys[count]=k; vals[count]=v;
       count++;
     }
     else
     {
       // permite lista simples (sem chave)
-      keys[count]=""; vals[count]=pairs[i];
+      string v=pairs[i];
+      StringTrimLeft(v); StringTrimRight(v);
+      keys[count]=""; vals[count]=v;
       count++;
     }
   }
@@ -170,6 +175,91 @@ string TemplatesRel()
   return "MQL5\\Profiles\\Templates";
 }
 
+string TemplatesAbs()
+{
+  return TerminalInfoString(TERMINAL_DATA_PATH) + "\\MQL5\\Profiles\\Templates";
+}
+
+string EnsureTplExt(string name)
+{
+  if(StringLen(name)>=4)
+  {
+    string tail=StringSubstr(name, StringLen(name)-4);
+    if(StringCompare(tail, ".tpl", false)==0) return name;
+  }
+  return name + ".tpl";
+}
+
+string ExpertBaseName(string expert)
+{
+  string e=expert;
+  StringReplace(e, "/", "\\");
+  string parts[]; int n=StringSplit(e, '\\', parts);
+  if(n>0) e=parts[n-1];
+  if(StringLen(e)>4)
+  {
+    string tail=StringSubstr(e, StringLen(e)-4);
+    if(tail==".mq5" || tail==".ex5") e=StringSubstr(e,0,StringLen(e)-4);
+  }
+  return e;
+}
+
+string TplNameFromExpert(string expert)
+{
+  string base=ExpertBaseName(expert);
+  return EnsureTplExt(base);
+}
+
+long FindChartBySymbolTF(const string sym, const ENUM_TIMEFRAMES tf)
+{
+  long id=ChartFirst();
+  while(id>=0)
+  {
+    if(ChartSymbol(id)==sym && ChartPeriod(id)==tf) return id;
+    id=ChartNext(id);
+  }
+  return 0;
+}
+
+string ChooseBaseTemplate()
+{
+  if(FileIsExist(TemplatesAbs()+"\\Moving Average.tpl")) return "Moving Average.tpl";
+  if(FileIsExist(TemplatesAbs()+"\\Default.tpl")) return "Default.tpl";
+  if(FileIsExist(TemplatesAbs()+"\\default.tpl")) return "default.tpl";
+  return "";
+}
+
+bool EnsureStubTemplate(const long cid, const string stubName, const string baseTplParam, string &err)
+{
+  string stub=EnsureTplExt(stubName==""?"Stub.tpl":stubName);
+  string stubPath=TemplatesAbs()+"\\"+stub;
+  if(FileIsExist(stubPath)) return true;
+
+  string baseTpl=baseTplParam;
+  if(baseTpl=="" || StringCompare(baseTpl, stub, false)==0) baseTpl=ChooseBaseTemplate();
+  if(baseTpl!="") baseTpl=EnsureTplExt(baseTpl);
+
+  string txt=""; bool is_unicode=false;
+  if(baseTpl!="")
+  {
+    string basePath=TemplatesAbs()+"\\"+baseTpl;
+    ReadFileText(basePath, txt, is_unicode);
+  }
+  if(txt=="")
+  {
+    // fallback: salva template do chart atual e usa como base
+    if(cid<=0) { err="stub_no_chart"; return false; }
+    string tmpName="__cmdmt_stub_src";
+    if(!ChartSaveTemplate(cid, tmpName)) { err="stub_save_fail"; return false; }
+    string tmpPath=TemplatesAbs()+"\\"+tmpName+".tpl";
+    if(!ReadFileText(tmpPath, txt, is_unicode)) { err="stub_read_fail"; return false; }
+    FileDelete(tmpPath);
+  }
+  txt=StripExpertBlock(txt);
+  if(!WriteFileText(stubPath, txt, is_unicode)) { err="stub_write_fail"; return false; }
+  return true;
+}
+
 bool ReadFileText(const string path, string &out, bool &is_unicode)
 {
   out=""; is_unicode=false;
@@ -223,6 +313,12 @@ string NormalizeExpertPath(string expert)
 {
   string e=expert;
   StringReplace(e, "/", "\\");
+  // if absolute path contains MQL5\\Experts\\, keep only relative part
+  string lower=e; StringToLower(lower);
+  string marker="\\mql5\\experts\\";
+  int idx=StringFind(lower, marker);
+  if(idx>=0)
+    e=StringSubstr(e, idx+StringLen(marker));
   if(StringFind(e, "Experts\\")==0) e=StringSubstr(e, StringLen("Experts\\"));
   if(StringLen(e)>4)
   {
@@ -281,7 +377,7 @@ bool ChartHasExpert(const long cid, const string expected)
 {
   string tmpName="__cmdmt_check.tpl";
   if(!ChartSaveTemplate(cid, tmpName)) return false;
-  string path=TemplatesRel()+"\\"+tmpName;
+  string path=TemplatesAbs()+"\\"+tmpName+".tpl";
   string txt=""; bool is_unicode=false;
   if(!ReadFileText(path, txt, is_unicode)) { FileDelete(path); return false; }
   bool ok=TemplateHasExpert(txt, expected);
@@ -475,6 +571,71 @@ bool H_SaveTpl(string &p[], string &m, string &d[])
   m="template saved"; return true;
 }
 
+// Cria um template com EA a partir de um base template (sem anexar no chart)
+// params: [0]=EA name, [1]=OUT_TPL, [2]=BASE_TPL (opcional), [3]=params (k=v;...)
+bool H_SaveTplEA(string &p[], string &m, string &d[])
+{
+  if(ArraySize(p)<2){ m="params"; return false; }
+  string expert=p[0];
+  string outTpl=p[1];
+  string baseTpl = (ArraySize(p)>2 && p[2]!="") ? p[2] : "";
+  string pstr = (ArraySize(p)>3)?p[3]:"";
+
+  string epath=ResolveExpertPath(expert);
+  if(baseTpl=="")
+  {
+    string prefer="Moving Average.tpl";
+    if(FileIsExist(TemplatesAbs()+"\\"+prefer)) baseTpl=prefer;
+    else if(FileIsExist(TemplatesAbs()+"\\Default.tpl")) baseTpl="Default.tpl";
+    else if(FileIsExist(TemplatesAbs()+"\\default.tpl")) baseTpl="default.tpl";
+    else baseTpl=expert+".tpl";
+  }
+  string basePath = baseTpl;
+  if(StringFind(baseTpl, ":\\")<0 && StringFind(baseTpl, "\\\\")!=0 && StringFind(baseTpl, "/")<0)
+    basePath = TemplatesAbs()+"\\"+baseTpl;
+  string txt=""; bool is_unicode=false;
+  if(!ReadFileText(basePath, txt, is_unicode)) { m="base_tpl"; return false; }
+  txt=StripExpertBlock(txt);
+  string block=BuildExpertBlock(epath, pstr);
+  int pos=StringFind(txt, "</chart>");
+  if(pos>=0) txt = StringSubstr(txt,0,pos) + block + StringSubstr(txt,pos);
+  else       txt = txt + "\n" + block;
+
+  // ensure .tpl extension
+  if(StringLen(outTpl)>4)
+  {
+    string tail=StringSubstr(outTpl, StringLen(outTpl)-4);
+    if(StringCompare(tail, ".tpl", false)!=0)
+      outTpl += ".tpl";
+  }
+  else
+  {
+    outTpl += ".tpl";
+  }
+  string outPath = TemplatesAbs()+"\\"+outTpl;
+  if(!WriteFileText(outPath, txt, is_unicode)) { m="tpl_write_fail"; return false; }
+  m="tpl_saved"; return true;
+}
+
+// Salva template a partir de um chart específico (id) usando ChartSaveTemplate
+// params: [0]=chart_id, [1]=name (sem .tpl)
+bool H_ChartSaveTpl(string &p[], string &m, string &d[])
+{
+  if(ArraySize(p)<2){ m="params"; return false; }
+  long cid=(long)StringToInteger(p[0]);
+  string name=p[1];
+  // ChartSaveTemplate adiciona .tpl automaticamente
+  if(StringLen(name)>4)
+  {
+    string tail=StringSubstr(name, StringLen(name)-4);
+    if(StringCompare(tail, ".tpl", false)==0)
+      name=StringSubstr(name,0,StringLen(name)-4);
+  }
+  if(cid<=0){ m="chart_id"; return false; }
+  bool ok=ChartSaveTemplate(cid, name);
+  m= ok?"saved":"save fail"; return ok;
+}
+
 bool H_CloseChart(string &p[], string &m, string &d[])
 {
   if(ArraySize(p)<2){ m="params"; return false; }
@@ -639,64 +800,39 @@ bool H_IndHandle(string &p[], string &m, string &d[])
   return true;
 }
 
+// Libera um handle obtido via ChartIndicatorGet/indhandle
+bool H_IndRelease(string &p[], string &m, string &d[])
+{
+  if(ArraySize(p)<1){ m="params"; return false; }
+  long h=(long)StringToInteger(p[0]);
+  if(h==0 || h==INVALID_HANDLE){ m="handle"; return false; }
+  bool ok = IndicatorRelease((int)h);
+  m = ok ? "released" : "release_fail";
+  return ok;
+}
+
 bool H_AttachEA(string &p[], string &m, string &d[])
 {
   if(ArraySize(p)<3){ m="params"; return false; }
   string sym=p[0]; ENUM_TIMEFRAMES tf=TfFromString(p[1]); string expert=p[2];
-  string tpl = (ArraySize(p)>3 && p[3]!="") ? p[3] : "";
+  string baseTpl = (ArraySize(p)>3 && p[3]!="") ? p[3] : "";
   string pstr = (ArraySize(p)>4)?p[4]:"";
   if(tf==0){ m="tf"; return false; }
-  long cid=ChartOpen(sym, tf); if(cid==0){ m="ChartOpen"; return false; }
+  long cid=FindChartBySymbolTF(sym, tf);
+  if(cid==0){ m="chart_not_found"; return false; }
   EnsureSymbol(sym);
 
   // aplica template direto somente se o usuário passar um .tpl explícito
-  if(tpl=="" && pstr=="" && StringFind(expert, ".tpl")>0)
+  if(baseTpl=="" && pstr=="" && StringFind(expert, ".tpl")>0)
   {
-    string tplPath="MQL5\\Profiles\\Templates\\"+expert;
-    if(FileIsExist(tplPath))
-    {
-      if(!ChartApplyTemplate(cid, expert)) { m="ChartApplyTemplate"; return false; }
-      if(!ChartHasExpert(cid, expert)) { m="ea not attached (init failed?)"; return false; }
-      g_lastEAName=expert; g_lastEAParams=pstr; g_lastEASymbol=sym; g_lastEATf=p[1]; g_lastEATpl=expert;
-      m="ea attached"; return true;
-    }
+    string tplName=EnsureTplExt(expert);
+    if(!ChartApplyTemplate(cid, tplName)) { m="ChartApplyTemplate"; return false; }
+    g_lastEAName=expert; g_lastEAParams=pstr; g_lastEASymbol=sym; g_lastEATf=p[1]; g_lastEATpl=tplName;
+    m="ea attached"; return true;
   }
 
-  // fallback: cria template com <expert> e aplica
-  string epath=ResolveExpertPath(expert);
-  string safe=expert;
-  StringReplace(safe,"\\","_"); StringReplace(safe,"/","_"); StringReplace(safe," ","_");
-  string tplName = "cmdmt_"+safe+".tpl";
-  string baseTpl = tpl;
-  if(baseTpl=="")
-  {
-    string prefer="Moving Average.tpl";
-    if(FileIsExist(TemplatesRel()+"\\"+prefer)) baseTpl=prefer;
-    else baseTpl=expert+".tpl";
-  }
-  string basePath = TemplatesRel()+"\\"+baseTpl;
-  string txt=""; bool is_unicode=false;
-  if(FileIsExist(basePath))
-  {
-    if(!ReadFileText(basePath, txt, is_unicode)){ m="tpl_read_fail"; return false; }
-  }
-  else
-  {
-    if(!ChartSaveTemplate(cid, tplName)) { m="tpl_save_fail"; return false; }
-    string tplRel=TemplatesRel()+"\\"+tplName;
-    if(!ReadFileText(tplRel, txt, is_unicode)){ m="tpl_read_fail"; return false; }
-  }
-  txt=StripExpertBlock(txt);
-  string block=BuildExpertBlock(epath, pstr);
-  int pos=StringFind(txt, "</chart>");
-  if(pos>=0) txt = StringSubstr(txt,0,pos) + block + StringSubstr(txt,pos);
-  else       txt = txt + "\n" + block;
-  string outPath = TemplatesRel()+"\\"+tplName;
-  if(!WriteFileText(outPath, txt, is_unicode)) { m="tpl_write_fail"; return false; }
-  if(!ChartApplyTemplate(cid, tplName)) { m="ChartApplyTemplate"; return false; }
-  Sleep(200);
-  g_lastEAName=epath; g_lastEAParams=pstr; g_lastEASymbol=sym; g_lastEATf=p[1]; g_lastEATpl=tplName;
-  m="ea attached"; return true;
+  m="tpl_required";
+  return false;
 }
 
 // --- Extras herdados do listener ---
@@ -1064,6 +1200,8 @@ bool Dispatch(string type, string &params[], string &msg, string &data[])
   if(type=="DROP_INFO") return H_DropInfo(params,msg,data);
   if(type=="APPLY_TPL") return H_ApplyTpl(params,msg,data);
   if(type=="SAVE_TPL") return H_SaveTpl(params,msg,data);
+  if(type=="SAVE_TPL_EA") return H_SaveTplEA(params,msg,data);
+  if(type=="CHART_SAVE_TPL") return H_ChartSaveTpl(params,msg,data);
   if(type=="CLOSE_CHART") return H_CloseChart(params,msg,data);
   if(type=="CLOSE_ALL") return H_CloseAll(params,msg,data);
   if(type=="LIST_CHARTS") return H_ListCharts(params,msg,data);
@@ -1078,6 +1216,8 @@ bool Dispatch(string type, string &params[], string &msg, string &data[])
   if(type=="IND_TOTAL") return H_IndTotal(params,msg,data);
   if(type=="IND_NAME") return H_IndName(params,msg,data);
   if(type=="IND_HANDLE") return H_IndHandle(params,msg,data);
+  if(type=="IND_GET") return H_IndHandle(params,msg,data);
+  if(type=="IND_RELEASE") return H_IndRelease(params,msg,data);
   if(type=="ATTACH_EA_FULL") return H_AttachEA(params,msg,data);
   if(type=="DETACH_EA_FULL") return H_DetachEA(params,msg,data);
   if(type=="RUN_SCRIPT") return H_RunScript(params,msg,data);

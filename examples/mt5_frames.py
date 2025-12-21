@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Exemplo de uso do protocolo binário SEND_ARRAY / GET_ARRAY.
-Requer o serviço MT5 OficialTelnetServiceSocket escutando (porta 9090).
+Requer o serviço MT5 Python-only (OficialTelnetServicePySocket) escutando (porta 9091).
 """
 
 import socket
@@ -71,7 +71,7 @@ def get_array(sock: socket.socket, name: str, dtype: str, count: int, req_id="2"
 
 def main():
     host = sys.argv[1] if len(sys.argv) >= 2 else "127.0.0.1"
-    port = int(sys.argv[2]) if len(sys.argv) >= 3 else 9090
+    port = int(sys.argv[2]) if len(sys.argv) >= 3 else 9091
     with socket.create_connection((host, port), timeout=3) as s:
         print("SEND_ARRAY ->", send_array(s, "prices", "f64", [1.1, 2.2, 3.3]))
         header, values = get_array(s, "prices", "f64", 3)

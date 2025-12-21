@@ -1,5 +1,8 @@
 Protocol: Binary frames (SEND_ARRAY / GET_ARRAY)
 
+Nota: este protocolo é servido pelo serviço MT5 Python-only
+`OficialTelnetServicePySocket` (porta padrão 9091).
+
 Overview
 --------
 There are two wire formats supported by the MT5 socket service:

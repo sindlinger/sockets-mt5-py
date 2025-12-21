@@ -26,6 +26,9 @@ Comandos:
   indtotal [SYMBOL] [TF] [SUB]
   indname [SYMBOL] [TF] [SUB] INDEX
   indhandle [SYMBOL] [TF] [SUB] NAME
+  indget [SYMBOL] [TF] [SUB] SHORTNAME
+  indrelease HANDLE
+  findea NOME
   attachea [SYMBOL] [TF] NAME [k=v ...] [-- k=v ...]
   detachea
   runscript [SYMBOL] [TF] TEMPLATE
@@ -57,6 +60,7 @@ import socket
 import shlex
 import re
 import shutil
+import signal
 
 BLUE_BG = "\033[44m"
 WHITE   = "\033[97m"
@@ -135,11 +139,26 @@ def parse_sym_tf(tokens, ctx):
         sym = ctx.get("symbol"); tf = ctx.get("tf")
     return sym, tf, rest
 
+def _parse_host_port(args, default_hosts, default_port):
+    host = default_hosts
+    port = default_port
+    if len(args) >= 1:
+        host = args[0]
+    if len(args) >= 2 and args[1].isdigit():
+        port = int(args[1])
+    return host, port
+
 DEFAULT_SYMBOL = "EURUSD"
 DEFAULT_TF = "H1"
 DEFAULT_EA_BASE_TPL = "Moving Average.tpl"
+DEBUG_TPL_ENV = "CMDMT_DEBUG_TPL"
 DEFAULT_HOSTS = "host.docker.internal,127.0.0.1"
 DEFAULT_PORT = 9090
+# serviço Python-only (MT5) e Python-Bridge
+DEFAULT_PY_SERVICE_HOSTS = os.environ.get("CMDMT_PY_SERVICE_HOSTS", DEFAULT_HOSTS)
+DEFAULT_PY_SERVICE_PORT = int(os.environ.get("CMDMT_PY_SERVICE_PORT", "9091"))
+DEFAULT_PY_BRIDGE_HOSTS = os.environ.get("CMDMT_PY_BRIDGE_HOSTS", DEFAULT_HOSTS)
+DEFAULT_PY_BRIDGE_PORT = int(os.environ.get("CMDMT_PY_BRIDGE_PORT", "9100"))
 # handshake desabilitado por padrão (conexão direta no serviço)
 CMDMT_HELLO_ENABLED = os.environ.get("CMDMT_HELLO", "0") != "0"
 CMDMT_HELLO_LINE = os.environ.get("CMDMT_HELLO_LINE", "HELLO CMDMT")
@@ -324,8 +343,172 @@ def run_mt5_compile_service():
         return False
     return run_mt5_compile(str(svc))
 
+def run_mt5_compile_pyservice():
+    term = find_terminal_data_dir()
+    if not term:
+        print("não encontrei o Terminal do MT5. Defina CMDMT_MT5_DATA ou MT5_DATA_DIR.")
+        return False
+    svc = term / "MQL5" / "Services" / "OficialTelnetServicePySocket.mq5"
+    if not svc.exists():
+        print("serviço Python não encontrado. Informe o caminho completo.")
+        return False
+    return run_mt5_compile(str(svc))
+
+def run_mt5_compile_all_services():
+    ok1 = run_mt5_compile_service()
+    ok2 = run_mt5_compile_pyservice()
+    return ok1 and ok2
+
+def _split_hosts(hosts: str):
+    return [h.strip() for h in hosts.replace(";", ",").split(",") if h.strip()]
+
+def _send_text_to_hosts(hosts: str, port: int, line: str, timeout: float = 3.0):
+    if not line.endswith("\n"):
+        line += "\n"
+    last_err = None
+    for host in _split_hosts(hosts):
+        try:
+            with socket.create_connection((host, port), timeout=timeout) as s:
+                s.sendall(line.encode("utf-8"))
+                data = b""
+                while True:
+                    chunk = s.recv(4096)
+                    if not chunk:
+                        break
+                    data += chunk
+                    if b"\n" in data:
+                        break
+                return data.decode("utf-8", errors="ignore")
+        except Exception as e:
+            last_err = e
+            continue
+    if last_err:
+        raise last_err
+    raise RuntimeError("sem host disponível")
+
+def _ping_service(hosts: str, port: int, timeout: float = 2.0):
+    try:
+        resp = _send_text_to_hosts(hosts, port, f"{gen_id()}|PING", timeout=timeout)
+        return True, resp.strip()
+    except Exception as e:
+        return False, str(e)
+
+def _ping_pybridge(hosts: str, port: int, timeout: float = 2.0):
+    try:
+        payload = json.dumps({"cmd": "ping"})
+        resp = _send_text_to_hosts(hosts, port, payload, timeout=timeout)
+        return True, resp.strip()
+    except Exception as e:
+        return False, str(e)
+
+def _state_dir():
+    base = os.environ.get("CMDMT_HOME")
+    if base:
+        p = Path(maybe_wslpath(base))
+    else:
+        p = Path.home() / ".cmdmt"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+def _pybridge_pid_path():
+    return _state_dir() / "pybridge.pid"
+
+def _pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+        return True
+    except Exception:
+        return False
+
+def pybridge_start():
+    pid_path = _pybridge_pid_path()
+    if pid_path.exists():
+        try:
+            pid = int(pid_path.read_text().strip())
+            if _pid_alive(pid):
+                print(f"pybridge já está rodando (pid={pid})")
+                return True
+        except Exception:
+            pass
+        try:
+            pid_path.unlink()
+        except Exception:
+            pass
+    script = Path(__file__).with_name("python_bridge_server.py")
+    cmd = [sys.executable, str(script)]
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        pid_path.write_text(str(proc.pid))
+        print(f"pybridge iniciado (pid={proc.pid})")
+        return True
+    except Exception as e:
+        print(f"falha ao iniciar pybridge: {e}")
+        return False
+
+def pybridge_stop():
+    pid_path = _pybridge_pid_path()
+    if not pid_path.exists():
+        print("pybridge não está rodando (pidfile ausente)")
+        return False
+    try:
+        pid = int(pid_path.read_text().strip())
+    except Exception:
+        print("pidfile inválido")
+        return False
+    if not _pid_alive(pid):
+        print("pybridge já não está rodando")
+        try:
+            pid_path.unlink()
+        except Exception:
+            pass
+        return True
+    try:
+        os.kill(pid, signal.SIGTERM)
+        time.sleep(0.3)
+        if _pid_alive(pid):
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except Exception:
+                pass
+        try:
+            pid_path.unlink()
+        except Exception:
+            pass
+        print("pybridge parado")
+        return True
+    except Exception as e:
+        print(f"falha ao parar pybridge: {e}")
+        return False
+
+def pybridge_status():
+    pid_path = _pybridge_pid_path()
+    if not pid_path.exists():
+        print("pybridge: parado")
+        return False
+    try:
+        pid = int(pid_path.read_text().strip())
+        if _pid_alive(pid):
+            print(f"pybridge: rodando (pid={pid})")
+            return True
+        print("pybridge: parado (pidfile antigo)")
+        return False
+    except Exception:
+        print("pybridge: estado desconhecido")
+        return False
+
 def resolve_expert_path(terminal_dir: Path, expert_name: str) -> str:
     name = expert_name.strip().replace("/", "\\")
+    # if absolute path includes MQL5\Experts\, keep only relative part
+    low = name.lower()
+    marker = "\\mql5\\experts\\"
+    idx = low.find(marker)
+    if idx >= 0:
+        name = name[idx + len(marker):]
     if name.lower().startswith("experts\\"):
         name = name[len("experts\\"):]
     if name.lower().endswith(".ex5") or name.lower().endswith(".mq5"):
@@ -348,12 +531,12 @@ def resolve_expert_path(terminal_dir: Path, expert_name: str) -> str:
             return str(rel).replace("/", "\\")
     return name
 
-def build_expert_block(name: str, params_str: str) -> str:
+def build_expert_block(name: str, path: str, params_str: str) -> str:
     lines = []
     lines.append("<expert>")
     lines.append(f"name={name}")
-    lines.append("flags=343")
-    lines.append("window_num=0")
+    lines.append(f"path={path}")
+    lines.append("expertmode=5")
     lines.append("<inputs>")
     if params_str:
         for item in params_str.split(";"):
@@ -367,6 +550,48 @@ def build_expert_block(name: str, params_str: str) -> str:
     lines.append("</expert>")
     return "\n".join(lines) + "\n"
 
+def insert_expert_block(content: str, block: str) -> str:
+    # Templates do MT5 normalmente colocam <expert> antes do primeiro <window>
+    idx = content.lower().find("<window>")
+    if idx != -1:
+        return content[:idx] + block + content[idx:]
+    if "</chart>" in content:
+        return content.replace("</chart>", block + "</chart>", 1)
+    return content + "\n" + block
+
+def _dbg_enabled(flag: bool = False) -> bool:
+    if flag:
+        return True
+    v = os.environ.get(DEBUG_TPL_ENV, "").strip().lower()
+    return v in ("1", "true", "yes", "on")
+
+def _dbg(msg: str, flag: bool = False):
+    if not _dbg_enabled(flag):
+        return
+    line = f"[DEBUG_TPL] {msg}"
+    print(line)
+    try:
+        Path.cwd().joinpath("cmdmt-debug.log").open("a", encoding="utf-8").write(line + "\n")
+    except Exception:
+        pass
+
+def expert_basename(name: str) -> str:
+    n = name.replace("/", "\\").split("\\")[-1]
+    if n.lower().endswith((".mq5", ".ex5", ".tpl")):
+        n = n[:-4]
+    return n
+
+def expert_template_path(term: Path, expert_name: str) -> str:
+    rel = resolve_expert_path(term, expert_name)
+    rel_path = Path(*rel.split("\\")) if rel else Path()
+    base = term / "MQL5" / "Experts" / rel_path
+    if (base.with_suffix(".ex5")).exists():
+        return f"Experts\\{rel}.ex5"
+    if (base.with_suffix(".mq5")).exists():
+        return f"Experts\\{rel}.mq5"
+    # fallback sem extensão
+    return f"Experts\\{rel}"
+
 def detect_tpl_encoding(data: bytes):
     if data.startswith(b"\xff\xfe"):
         return "utf-16-le", True
@@ -375,6 +600,104 @@ def detect_tpl_encoding(data: bytes):
     if b"\x00" in data[:200]:
         return "utf-16-le", False
     return "utf-8", False
+
+def ensure_stub_template(stub_name: str = "Stub.tpl", base_tpl_name: str = "", debug: bool = False):
+    term = find_terminal_data_dir()
+    if not term:
+        return None
+    tpl_dir = term / "MQL5" / "Profiles" / "Templates"
+    tpl_dir.mkdir(parents=True, exist_ok=True)
+    stub_path = tpl_dir / stub_name
+    if stub_path.exists():
+        _dbg(f"stub exists: {stub_path}", debug)
+        return stub_path
+
+    base_name = base_tpl_name or DEFAULT_EA_BASE_TPL
+    base_tpl = tpl_dir / base_name
+    if not base_tpl.exists():
+        # fallback to Default.tpl then any template
+        base_tpl = tpl_dir / "Default.tpl"
+        if not base_tpl.exists():
+            tpls = list(tpl_dir.glob("*.tpl"))
+            if tpls:
+                base_tpl = tpls[0]
+    if not base_tpl.exists():
+        _dbg("base template not found for stub", debug)
+        return None
+
+    _dbg(f"stub base: {base_tpl}", debug)
+    raw = base_tpl.read_bytes()
+    enc, has_bom = detect_tpl_encoding(raw)
+    try:
+        content = raw.decode("utf-16" if has_bom and enc.startswith("utf-16") else enc, errors="ignore")
+    except Exception:
+        content = raw.decode("utf-8", errors="ignore")
+    content = re.sub(r"(?is)<expert>.*?</expert>\s*", "", content)
+
+    if enc.startswith("utf-16"):
+        if has_bom:
+            data = content.encode("utf-16", errors="ignore")
+        else:
+            data = content.encode(enc, errors="ignore")
+        stub_path.write_bytes(data)
+    else:
+        stub_path.write_text(content, encoding="utf-8", errors="ignore")
+    _dbg(f"stub written: {stub_path}", debug)
+    return stub_path
+
+def ensure_ea_template_from_stub(expert_name: str, params_str: str, stub_name: str = "Stub.tpl", base_tpl_name: str = "", debug: bool = False):
+    term = find_terminal_data_dir()
+    if not term:
+        return None
+    tpl_dir = term / "MQL5" / "Profiles" / "Templates"
+    tpl_dir.mkdir(parents=True, exist_ok=True)
+    stub_path = ensure_stub_template(stub_name=stub_name, base_tpl_name=base_tpl_name, debug=debug)
+    if not stub_path or not stub_path.exists():
+        _dbg("stub missing after ensure", debug)
+        return None
+
+    raw = stub_path.read_bytes()
+    enc, has_bom = detect_tpl_encoding(raw)
+    try:
+        content = raw.decode("utf-16" if has_bom and enc.startswith("utf-16") else enc, errors="ignore")
+    except Exception:
+        content = raw.decode("utf-8", errors="ignore")
+
+    content = re.sub(r"(?is)<expert>.*?</expert>\s*", "", content)
+    exp_name = expert_basename(expert_name)
+    exp_path = expert_template_path(term, expert_name)
+    block = build_expert_block(exp_name, exp_path, params_str)
+    loc = "<window>" if "<window>" in content.lower() else "</chart>" if "</chart>" in content else "append"
+    _dbg(f"attach ea name={exp_name} path={exp_path} insert={loc}", debug)
+    content = insert_expert_block(content, block)
+
+    out_name = expert_basename(expert_name) + ".tpl"
+    out_path = tpl_dir / out_name
+    if enc.startswith("utf-16"):
+        if has_bom:
+            data = content.encode("utf-16", errors="ignore")
+        else:
+            data = content.encode(enc, errors="ignore")
+        out_path.write_bytes(data)
+    else:
+        out_path.write_text(content, encoding="utf-8", errors="ignore")
+    _dbg(f"template written: {out_path}", debug)
+    # verify expert block exists in output
+    try:
+        out_raw = out_path.read_bytes()
+        enc2, has_bom2 = detect_tpl_encoding(out_raw)
+        out_txt = out_raw.decode("utf-16" if has_bom2 and enc2.startswith("utf-16") else enc2, errors="ignore")
+        low = out_txt.lower()
+        ok = "<expert>" in low and f"name={exp_name.lower()}" in low and f"path={exp_path.lower()}" in low
+        _dbg(f"verify block ok={ok}", debug)
+        if debug:
+            s = low.find("<expert>")
+            e = low.find("</expert>", s)
+            if s != -1 and e != -1:
+                _dbg("expert block:\\n" + out_txt[s:e+9], debug)
+    except Exception:
+        pass
+    return out_name
 
 def ensure_ea_template(expert_name: str, params_str: str, base_tpl_name: str = ""):
     term = find_terminal_data_dir()
@@ -402,13 +725,11 @@ def ensure_ea_template(expert_name: str, params_str: str, base_tpl_name: str = "
         content = raw.decode("utf-8", errors="ignore")
     # remove existing <expert> block
     content = re.sub(r"(?is)<expert>.*?</expert>\s*", "", content)
-    # insert new block before </chart>
-    expert_path = resolve_expert_path(term, expert_name)
-    block = build_expert_block(expert_path, params_str)
-    if "</chart>" in content:
-        content = content.replace("</chart>", block + "</chart>", 1)
-    else:
-        content = content + "\n" + block
+    # insert new block before <window> (fallback to </chart>)
+    exp_name = expert_basename(expert_name)
+    exp_path = expert_template_path(term, expert_name)
+    block = build_expert_block(exp_name, exp_path, params_str)
+    content = insert_expert_block(content, block)
     # write template
     safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", expert_name.strip()) or "ea"
     tpl_name = f"cmdmt_{safe}.tpl"
@@ -574,11 +895,47 @@ def parse_user_line(line: str, ctx):
     if head in ("compile", "compilar"):
         if len(parts) >= 2 and parts[1].lower() in ("here","service","servico"):
             return "COMPILE_HERE", []
+        if len(parts) >= 2 and parts[1].lower() in ("py","pyservice","python","pyservico"):
+            return "COMPILE_PYSERVICE", []
+        if len(parts) >= 2 and parts[1].lower() in ("all","todos","ambos","services","servicos"):
+            return "COMPILE_ALL", []
         if len(parts) < 2:
             print("uso: compile <arquivo.mq5|nome|caminho> | compile here")
             return None
         target = " ".join(parts[1:])
         return "COMPILE", [target]
+
+    if head in ("pyservice", "pysvc", "pyserv"):
+        if len(parts) < 2:
+            print("uso: pyservice <ping|cmd|raw|compile> [args...]"); return None
+        action = parts[1].lower()
+        rest = parts[2:]
+        if action == "compile":
+            return "COMPILE_PYSERVICE", []
+        if action in ("ping","status"):
+            host, port = _parse_host_port(rest, DEFAULT_PY_SERVICE_HOSTS, DEFAULT_PY_SERVICE_PORT)
+            return "PYSERVICE_PING", [host, str(port)]
+        if action == "raw" and len(rest) >= 1:
+            return "PYSERVICE_RAW", [" ".join(rest)]
+        if action == "cmd" and len(rest) >= 1:
+            return "PYSERVICE_CMD", [rest[0].upper()] + rest[1:]
+        print("uso: pyservice <ping|cmd|raw|compile> [args...]"); return None
+
+    if head in ("pybridge", "pyb"):
+        if len(parts) < 2:
+            print("uso: pybridge <start|stop|status|ping|ensure> [host] [port]"); return None
+        action = parts[1].lower()
+        rest = parts[2:]
+        if action == "start":
+            return "PYBRIDGE_START", []
+        if action == "stop":
+            return "PYBRIDGE_STOP", []
+        if action == "status":
+            return "PYBRIDGE_STATUS", []
+        if action in ("ping","ensure"):
+            host, port = _parse_host_port(rest, DEFAULT_PY_BRIDGE_HOSTS, DEFAULT_PY_BRIDGE_PORT)
+            return ("PYBRIDGE_ENSURE" if action=="ensure" else "PYBRIDGE_PING", [host, str(port)])
+        print("uso: pybridge <start|stop|status|ping|ensure> [host] [port]"); return None
 
     # Chart commands: "chart open symbol tf", "chart close", "chart list", "chart add ind/ea/tpl ..."
     if head == "chart":
@@ -638,6 +995,12 @@ def parse_user_line(line: str, ctx):
             if len(tpl_tokens) == 0:
                 print("uso: chart save tpl [SYMBOL] [TF] TEMPLATE"); return None
             return parse_user_line("savetpl " + " ".join(tpl_tokens), ctx)
+        if action in ("saveid","savechart","savetplid") and len(rest) >= 2:
+            chart_id = rest[0]
+            name = " ".join(rest[1:])
+            if not chart_id.isdigit():
+                print("uso: chart saveid CHART_ID NAME"); return None
+            return "CHART_SAVE_TPL", [chart_id, name]
         if action == "screenshot" and len(rest) >= 4:
             # chart screenshot SYMBOL TF FILE WIDTH [HEIGHT]
             params = rest[0:4]
@@ -740,6 +1103,11 @@ def parse_user_line(line: str, ctx):
         "mt5compile":"compile",
         "comp":"compile",
         "compile_service":"compile",
+        "indget":"indhandle",
+        "indrelease":"indrelease",
+        "chartsavetpl":"chartsavetpl",
+        "chartsave":"chartsavetpl",
+        "savetplea":"savetplea",
     }
     cmd = alias.get(parts[0].lower(), parts[0].lower())
 
@@ -758,12 +1126,16 @@ def parse_user_line(line: str, ctx):
             "  windowfind [SYMBOL] [TF] NAME\n"
             "  applytpl [SYMBOL] [TF] TEMPLATE\n"
             "  savetpl [SYMBOL] [TF] TEMPLATE\n"
+            "  savetplea EA OUT_TPL [BASE_TPL] [k=v;...]\n"
             "  attachind [SYMBOL] [TF] NAME [SUB|sub=N] [k=v ...] [-- k=v ...]\n"
             "  detachind [SYMBOL] [TF] NAME [SUB|sub=N]\n"
             "  indtotal [SYMBOL] [TF] [SUB]\n"
             "  indname [SYMBOL] [TF] [SUB] INDEX\n"
             "  indhandle [SYMBOL] [TF] [SUB] NAME\n"
-            "  attachea [SYMBOL] [TF] NAME [k=v ...] [-- k=v ...]\n"
+            "  indget [SYMBOL] [TF] [SUB] SHORTNAME\n"
+            "  indrelease HANDLE\n"
+            "  findea NOME\n"
+            "  attachea [SYMBOL] [TF] NAME [k=v ...] [-- k=v ...] [--debug]\n"
             "  detachea\n"
             "  runscript [SYMBOL] [TF] TEMPLATE\n"
             "  buy [SYMBOL] LOTS [sl] [tp]  (sl/tp são preços, opcional)\n"
@@ -775,6 +1147,7 @@ def parse_user_line(line: str, ctx):
             "  listinputs                   (últimos params de ind/ea)\n"
             "  setinput NAME VAL            (reaplica último ind/ea)\n"
             "  snapshot_save NAME | snapshot_apply NAME | snapshot_list\n"
+            "  chartsavetpl CHART_ID NAME   (ChartSaveTemplate no chart)\n"
             "  obj_list [PREFIX]\n"
             "  obj_delete NAME | obj_delete_prefix PREFIX\n"
             "  obj_move NAME TIME PRICE [INDEX]\n"
@@ -784,6 +1157,14 @@ def parse_user_line(line: str, ctx):
             "  py PAYLOAD                   (PY_CALL)\n"
             "  compile ARQUIVO|NOME         (compila .mq5 via MetaEditor)\n"
             "  compile here                 (compila OficialTelnetServiceSocket.mq5)\n"
+            "  compile pyservice            (compila OficialTelnetServicePySocket.mq5)\n"
+            "  compile all                  (compila os dois serviços)\n"
+            "  pyservice ping [HOST] [PORT] (testa serviço Python-only)\n"
+            "  pyservice cmd TYPE [PARAMS]  (envia comando direto ao 9091)\n"
+            "  pyservice raw LINE           (envia linha crua ao 9091)\n"
+            "  pybridge start|stop|status\n"
+            "  pybridge ping [HOST] [PORT]\n"
+            "  pybridge ensure [HOST] [PORT]\n"
             "  cmd TYPE [PARAMS...]         (envia TYPE direto)\n"
             "  PY_CONNECT | PY_DISCONNECT   (via cmd TYPE ...)\n"
             "  PY_ARRAY_CALL [NAME]         (via cmd TYPE ...)\n"
@@ -847,6 +1228,25 @@ def parse_user_line(line: str, ctx):
         if not ensure_ctx(ctx, not sym, not tf):
             return None
         return "SAVE_TPL", [sym, tf, tpl]
+    if cmd == "savetplea" and len(parts) >= 3:
+        ea = parts[1]
+        out_tpl = parts[2]
+        base_tpl = ""
+        params_tokens = parts[3:]
+        if params_tokens:
+            if params_tokens[0].lower().startswith("base="):
+                base_tpl = params_tokens[0][5:]
+                params_tokens = params_tokens[1:]
+                # suporte a base template com espaços (ex: "Moving Average.tpl")
+                if base_tpl and not base_tpl.lower().endswith(".tpl") and params_tokens:
+                    if params_tokens[0].lower().endswith(".tpl"):
+                        base_tpl = base_tpl + " " + params_tokens[0]
+                        params_tokens = params_tokens[1:]
+            elif params_tokens[0].lower().endswith(".tpl"):
+                base_tpl = params_tokens[0]
+                params_tokens = params_tokens[1:]
+        pstr = " ".join(params_tokens).strip()
+        return "SAVE_TPL_EA", [ea, out_tpl, base_tpl, pstr]
     if cmd == "closechart":
         sym, tf, _ = parse_sym_tf(parts[1:], ctx)
         if not ensure_ctx(ctx, not sym, not tf):
@@ -994,6 +1394,14 @@ def parse_user_line(line: str, ctx):
         sym, tf, _ = parse_sym_tf(r, ctx)
         if not ensure_ctx(ctx, not sym, not tf): return None
         return "IND_HANDLE", [sym, tf, sub, name]
+    if cmd == "indrelease" and len(parts) >= 2:
+        return "IND_RELEASE", [parts[1]]
+    if cmd == "chartsavetpl" and len(parts) >= 3:
+        chart_id = parts[1]
+        name = " ".join(parts[2:])
+        if not chart_id.isdigit():
+            print("uso: chartsavetpl CHART_ID NAME"); return None
+        return "CHART_SAVE_TPL", [chart_id, name]
     if cmd == "attachea" and len(parts) >= 2:
         r = parts[1:]
         sym = None; tf = None
@@ -1007,6 +1415,10 @@ def parse_user_line(line: str, ctx):
         if not r:
             print("uso: attachea [SYMBOL] [TF] NAME [-- k=v ...]"); return None
         params_tokens = []
+        debug_flag = False
+        if "--debug" in r:
+            debug_flag = True
+            r = [t for t in r if t != "--debug"]
         if "--" in r:
             idx = r.index("--")
             params_tokens = r[idx+1:]
@@ -1019,7 +1431,7 @@ def parse_user_line(line: str, ctx):
                     break
         name = " ".join(r)
         params_str = ";".join(params_tokens) if params_tokens else ""
-        return "ATTACH_EA_SMART", [sym, tf, name, params_str]
+        return "ATTACH_EA_SMART", [sym, tf, name, params_str, "1" if debug_flag else ""]
     if cmd == "detachea":
         return "DETACH_EA_FULL", parts[1:]
     if cmd == "runscript" and len(parts) >= 2:
@@ -1046,6 +1458,9 @@ def parse_user_line(line: str, ctx):
         params = [pref] if pref else []
         if lim: params.append(lim)
         return "GLOBAL_LIST", params
+    if cmd == "findea" and len(parts) >= 2:
+        name = " ".join(parts[1:])
+        return "FIND_EA", [name]
     if cmd == "py" and len(parts) >= 2:
         payload = " ".join(parts[1:])
         return "PY_CALL", [payload]
@@ -1337,6 +1752,71 @@ def main():
             if cmd_type == "COMPILE_HERE":
                 run_mt5_compile_service()
                 return
+            if cmd_type == "COMPILE_PYSERVICE":
+                run_mt5_compile_pyservice()
+                return
+            if cmd_type == "COMPILE_ALL":
+                run_mt5_compile_all_services()
+                return
+            if cmd_type == "PYSERVICE_PING":
+                host = params[0] if params else DEFAULT_PY_SERVICE_HOSTS
+                port = int(params[1]) if len(params) >= 2 else DEFAULT_PY_SERVICE_PORT
+                okp, info = _ping_service(host, port)
+                print(("OK " if okp else "ERROR ") + info)
+                return
+            if cmd_type == "PYSERVICE_CMD":
+                if not params:
+                    print("uso: pyservice cmd TYPE [PARAMS...]")
+                    return
+                host = DEFAULT_PY_SERVICE_HOSTS
+                port = DEFAULT_PY_SERVICE_PORT
+                line_out = "|".join([gen_id(), params[0]] + params[1:])
+                try:
+                    resp_txt = _send_text_to_hosts(host, port, line_out, timeout=args.timeout)
+                except Exception as e:
+                    print(f"ERROR: conexão falhou ({e})")
+                    return
+                print(resp_txt.strip())
+                return
+            if cmd_type == "PYSERVICE_RAW":
+                if not params:
+                    print("uso: pyservice raw LINE")
+                    return
+                host = DEFAULT_PY_SERVICE_HOSTS
+                port = DEFAULT_PY_SERVICE_PORT
+                try:
+                    resp_txt = _send_text_to_hosts(host, port, params[0], timeout=args.timeout)
+                except Exception as e:
+                    print(f"ERROR: conexão falhou ({e})")
+                    return
+                print(resp_txt.strip())
+                return
+            if cmd_type == "PYBRIDGE_START":
+                pybridge_start()
+                return
+            if cmd_type == "PYBRIDGE_STOP":
+                pybridge_stop()
+                return
+            if cmd_type == "PYBRIDGE_STATUS":
+                pybridge_status()
+                return
+            if cmd_type == "PYBRIDGE_PING":
+                host = params[0] if params else DEFAULT_PY_BRIDGE_HOSTS
+                port = int(params[1]) if len(params) >= 2 else DEFAULT_PY_BRIDGE_PORT
+                okp, info = _ping_pybridge(host, port)
+                print(("OK " if okp else "ERROR ") + info)
+                return
+            if cmd_type == "PYBRIDGE_ENSURE":
+                host = params[0] if params else DEFAULT_PY_BRIDGE_HOSTS
+                port = int(params[1]) if len(params) >= 2 else DEFAULT_PY_BRIDGE_PORT
+                okp, info = _ping_pybridge(host, port)
+                if okp:
+                    print("OK pybridge_alive")
+                    return
+                pybridge_start()
+                okp2, info2 = _ping_pybridge(host, port)
+                print(("OK " if okp2 else "ERROR ") + (info2 or "pybridge"))
+                return
             if cmd_type == "RAW":
                 payload = params[0]
                 try:
@@ -1360,17 +1840,45 @@ def main():
                 print(resp_obj)
                 return
             if cmd_type == "ATTACH_EA_SMART":
-                sym, tf, name, params_str = params[0], params[1], params[2], params[3] if len(params) > 3 else ""
+                sym = params[0]
+                tf = params[1]
+                name = params[2]
+                params_str = params[3] if len(params) > 3 else ""
+                debug_flag = bool(params[4]) if len(params) > 4 else False
                 base_tpl = resolve_base_template()
-                send_params = [sym, tf, name]
-                if base_tpl or params_str:
-                    send_params.append(base_tpl)
-                    if params_str:
-                        send_params.append(params_str)
-                ok, msg, data = send_cmd("ATTACH_EA_FULL", send_params)
+                tpl_name = ensure_ea_template_from_stub(
+                    name,
+                    params_str,
+                    stub_name="Stub.tpl",
+                    base_tpl_name=base_tpl,
+                    debug=debug_flag,
+                )
+                if not tpl_name:
+                    print("ERROR stub_create_fail")
+                    return
+                _dbg(f"send ATTACH_EA_FULL tpl={tpl_name}", debug_flag)
+                ok, msg, data = send_cmd("ATTACH_EA_FULL", [sym, tf, tpl_name])
                 print(("OK " if ok else "ERROR ") + msg)
                 for ln2 in data:
                     print("  " + ln2)
+                return
+            if cmd_type == "FIND_EA":
+                term = find_terminal_data_dir()
+                if not term:
+                    print("ERROR terminal_dir"); return
+                name = params[0]
+                rel = resolve_expert_path(term, name)
+                experts_dir = term / "MQL5" / "Experts"
+                rel_path = Path(*rel.split("\\")) if rel else Path()
+                ex5 = experts_dir / (str(rel_path) + ".ex5")
+                mq5 = experts_dir / (str(rel_path) + ".mq5")
+                if ex5.exists() or mq5.exists():
+                    found = str(rel).replace("/", "\\")
+                    abs_path = ex5 if ex5.exists() else mq5
+                    print("OK " + found)
+                    print("  " + str(abs_path))
+                else:
+                    print("ERROR not_found")
                 return
 
             line_out = "|".join([cmd_id, cmd_type] + params)

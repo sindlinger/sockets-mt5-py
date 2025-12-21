@@ -20,7 +20,7 @@ input bool   InpNorm = false;
 input string InpWindow = "hann"; // hann|hamming|blackman|"" (none)
 input bool   InpNewBarOnly = true;
 input string InpHost = "127.0.0.1";
-input int    InpPort = 9090;
+input int    InpPort = 9091;
 
 static double Buf[];
 static datetime last_bar = 0;

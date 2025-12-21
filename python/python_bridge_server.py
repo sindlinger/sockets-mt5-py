@@ -5,6 +5,9 @@ Python bridge para MT5.
 Modo default: conecta no Gateway (porta única) e responde PY_CALL / PY_ARRAY_CALL.
 Modo alternativo: servidor dedicado (legacy).
 
+Extensão:
+  - handlers ficam em python/mt5_bridge.py (mini-SDK / registry)
+
 Env vars:
   PYBRIDGE_MODE=gate|gateway|server
   PYBRIDGE_HOST / PYBRIDGE_PORT (modo server)
@@ -17,10 +20,8 @@ import socket
 import socketserver
 import time
 
-try:
-    import cupy as cp  # type: ignore
-except Exception:
-    cp = None
+import mt5_bridge as mb
+
 try:
     import numpy as np  # type: ignore
 except Exception:
@@ -37,39 +38,7 @@ LAST_ARRAY = {"name": "", "dtype": "", "count": 0, "data": b""}
 
 
 def handle_request(req: dict) -> dict:
-    cmd = req.get("cmd")
-
-    if cmd == "ping":
-        return {"ok": True, "pong": True, "ts": time.time()}
-
-    if cmd == "echo":
-        return {"ok": True, "data": req.get("data")}
-
-    if cmd == "signal":
-        ma_fast = float(req.get("ma_fast", 0.0))
-        ma_slow = float(req.get("ma_slow", 0.0))
-        rsi     = float(req.get("rsi", 50.0))
-
-        action = "HOLD"
-        if ma_fast > ma_slow and rsi < 70:
-            action = "BUY"
-        elif ma_fast < ma_slow and rsi > 30:
-            action = "SELL"
-
-        return {
-            "ok": True,
-            "action": action,
-            "debug": {
-                "ma_fast": ma_fast,
-                "ma_slow": ma_slow,
-                "rsi": rsi,
-                "symbol": req.get("symbol"),
-                "tf": req.get("tf"),
-                "time": req.get("time"),
-            },
-        }
-
-    return {"ok": False, "error": f"cmd desconhecido: {cmd}"}
+    return mb.handle_request(req)
 
 
 # ----------------- Frame helpers -----------------
@@ -151,53 +120,6 @@ def _dtype_to_numpy(dtype: str):
     return None
 
 
-def _parse_fft_opts(name: str) -> dict:
-    base, sep, tail = name.partition("?")
-    opts = {"half": False, "log": False, "norm": False, "win": ""}
-    if not tail:
-        return opts
-    for part in tail.replace(";", "&").split("&"):
-        if not part or "=" not in part:
-            continue
-        k, v = part.split("=", 1)
-        k = k.strip().lower()
-        v = v.strip().lower()
-        if k in ("half", "log", "norm"):
-            opts[k] = v in ("1", "true", "yes", "y", "on")
-        elif k == "win":
-            opts[k] = v
-    return opts
-
-
-def _apply_window(arr, win: str):
-    if not win:
-        return arr
-    n = arr.shape[0]
-    if win == "hann":
-        w = np.hanning(n)
-    elif win == "hamming":
-        w = np.hamming(n)
-    elif win == "blackman":
-        w = np.blackman(n)
-    else:
-        return arr
-    return arr * w
-
-
-def _fft_mag(arr, use_gpu: bool, half: bool):
-    if use_gpu and cp is not None:
-        x = cp.asarray(arr)
-        if half:
-            y = cp.abs(cp.fft.rfft(x))
-        else:
-            y = cp.abs(cp.fft.fft(x))
-        return cp.asnumpy(y)
-    # fallback CPU
-    if half:
-        return np.abs(np.fft.rfft(arr))
-    return np.abs(np.fft.fft(arr))
-
-
 def handle_frame(frame: bytes, header_text: str) -> bytes:
     parts = header_text.split("|")
     if len(parts) >= 6 and parts[1] == "PY_ARRAY_CALL":
@@ -222,20 +144,15 @@ def handle_frame(frame: bytes, header_text: str) -> bytes:
         # converte payload -> numpy
         arr = np.frombuffer(payload, dtype=dt, count=count)
 
-        if name.startswith("fft"):
-            opts = _parse_fft_opts(name)
-            use_gpu = cp is not None
-            arr = _apply_window(arr, opts.get("win", ""))
-            out = _fft_mag(arr, use_gpu, opts.get("half", False))
-            if opts.get("norm", False):
-                maxv = float(out.max()) if out.size else 0.0
-                if maxv > 0:
-                    out = out / maxv
-            if opts.get("log", False):
-                out = np.log10(out + 1e-12)
-            out = out.astype(dt, copy=False)
-        else:
+        try:
+            out = mb.handle_array(name, arr, dtype)
+        except Exception:
             out = arr
+
+        if np is None:
+            out = arr
+        else:
+            out = np.asarray(out, dtype=dt)
 
         out_bytes = out.tobytes()
         resp_header = f"{parts[0]}|PY_ARRAY_RESP|{name}|{dtype}|{len(out)}|{len(out_bytes)}"
