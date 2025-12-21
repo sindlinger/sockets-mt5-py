@@ -29,7 +29,7 @@ def send_line(host, port, line: str):
 
 def main():
     host = sys.argv[1] if len(sys.argv) >= 2 else "127.0.0.1"
-    # CLI JSON -> gateway; default 9095
+    # Legado: CLI JSON -> serviço direto; default 9090
     port = int(sys.argv[2]) if len(sys.argv) >= 3 else 9095
 
     set_blue()

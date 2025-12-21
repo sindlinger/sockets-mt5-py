@@ -108,11 +108,28 @@ int BuildParams(string &pstr, MqlParam &outParams[])
   return cnt;
 }
 
-bool EnsureSymbol(const string sym)
+bool EnsureSymbol(string &sym)
 {
-  if(SymbolSelect(sym, true)) return true;
-  Print("[bridge] SymbolSelect failed for ", sym);
-  return false;
+  // Não bloqueia por símbolo; deixa o MT5 resolver no ChartOpen/iCustom
+  return true;
+}
+
+string NormalizeTfString(const string tf)
+{
+  if(StringFind(tf, "PERIOD_")==0) return StringSubstr(tf, 7);
+  return tf;
+}
+
+bool UseChartDefaults(string &sym, string &tfstr)
+{
+  long cid = ChartFirst();
+  if(cid<0) return false;
+  string cs = ChartSymbol(cid);
+  ENUM_TIMEFRAMES ctf = (ENUM_TIMEFRAMES)ChartPeriod(cid);
+  if(cs=="") return false;
+  sym = cs;
+  tfstr = NormalizeTfString(EnumToString(ctf));
+  return true;
 }
 
 string Join(string &arr[], const string sep)
@@ -422,7 +439,16 @@ bool H_OpenChart(string &p[], string &m, string &d[])
   if(ArraySize(p)<2){ m="params"; return false; }
   string sym=p[0]; ENUM_TIMEFRAMES tf=TfFromString(p[1]);
   if(tf==0){ m="tf"; return false; }
-  if(!EnsureSymbol(sym)) { m="symbol"; return false; }
+  if(!EnsureSymbol(sym))
+  {
+    string tfstr=p[1];
+    if(UseChartDefaults(sym, tfstr))
+    {
+      tf = TfFromString(tfstr);
+      if(tf==0){ m="tf"; return false; }
+    }
+    else { m="symbol"; return false; }
+  }
   long cid=ChartOpen(sym, tf);
   if(cid==0){ m="ChartOpen fail"; return false; }
   ChartSetInteger(cid, CHART_BRING_TO_TOP, 0, true);
@@ -511,7 +537,14 @@ bool H_AttachInd(string &p[], string &m, string &d[])
     }
   }
   ENUM_TIMEFRAMES tf=TfFromString(tfstr); if(tf==0){ m="tf"; return false; }
-  if(!EnsureSymbol(sym)) { m="symbol"; return false; }
+  if(!EnsureSymbol(sym))
+  {
+    if(UseChartDefaults(sym, tfstr))
+    {
+      tf=TfFromString(tfstr); if(tf==0){ m="tf"; return false; }
+    }
+    else { m="symbol"; return false; }
+  }
   long cid=ChartOpen(sym, tf); if(cid==0){ m="ChartOpen"; return false; }
   int handle=INVALID_HANDLE;
   if(pstr=="")
@@ -553,7 +586,14 @@ bool H_DetachInd(string &p[], string &m, string &d[])
   if(ArraySize(p)<4){ m="params"; return false; }
   string sym=p[0]; string tfstr=p[1]; string name=p[2]; int sub=SubwindowSafe(p[3]);
   ENUM_TIMEFRAMES tf=TfFromString(tfstr); if(tf==0){ m="tf"; return false; }
-  if(!EnsureSymbol(sym)) { m="symbol"; return false; }
+  if(!EnsureSymbol(sym))
+  {
+    if(UseChartDefaults(sym, tfstr))
+    {
+      tf=TfFromString(tfstr); if(tf==0){ m="tf"; return false; }
+    }
+    else { m="symbol"; return false; }
+  }
   long cid=ChartOpen(sym, tf); if(cid==0){ m="ChartOpen"; return false; }
   int total=ChartIndicatorsTotal(cid, sub-1);
   int deleted=0;

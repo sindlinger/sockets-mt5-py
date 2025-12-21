@@ -31,7 +31,7 @@ basta trocar a função send_cmd/recv mantendo o mesmo mapeamento de comandos.
 import socket
 import sys
 
-# Cliente default para o gateway (porta 9095). Ajuste se quiser falar direto com o serviço MQL 9090.
+# Legado: cliente direto no serviço MQL (porta 9090).
 HOST = "127.0.0.1"
 PORT = 9095
 

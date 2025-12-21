@@ -481,32 +481,7 @@ int OnStart()
           }
         else
         {
-          bool doLog = ShouldLogCheck(type);
-          if(doLog) LogCaptureBegin();
           ok=Dispatch(type, params, msg, data);
-          if(doLog)
-          {
-            string lines[];
-            ReadLogLines(lines);
-            string filter = BaseNameNoExt(CmdLogFilter(type, params));
-            string err = FindErrorInLines(lines, filter);
-            if(err=="" && (type=="ATTACH_EA_FULL" || type=="ATTACH_IND_FULL" || type=="APPLY_TPL"))
-              err = FindErrorInLines(lines, "");
-            if(err!="")
-            {
-              if(ok)
-              {
-                ok=false;
-                msg="mt5_error: "+err;
-              }
-              else
-              {
-                int n=ArraySize(data);
-                ArrayResize(data, n+1);
-                data[n]="mt5_error: "+err;
-              }
-            }
-          }
         }
 
         string resp = (ok?"OK":"ERROR") + "\n" + msg + "\n";

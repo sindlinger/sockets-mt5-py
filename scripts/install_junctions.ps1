@@ -53,9 +53,15 @@ foreach ($kv in $links.GetEnumerator()) {
   Ensure-Dir $target
 
   if (Test-Path $link) {
-    $item = Get-Item $link -Force
-    if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
-      Remove-Item $link -Force
+    $item = $null
+    try {
+      $item = Get-Item -LiteralPath $link -Force -ErrorAction Stop
+    } catch {
+      $item = $null
+    }
+    if ($null -ne $item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+      # remove junction safely (rmdir works better for reparse points)
+      cmd.exe /c "rmdir `"$link`""
     } else {
       $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
       $backup = $link + ".bak-" + $stamp
@@ -64,7 +70,11 @@ foreach ($kv in $links.GetEnumerator()) {
     }
   }
 
-  cmd.exe /c "mklink /J `"$link`" `"$target`""
+  if (Test-Path $link) {
+    Write-Host "Link já existe, mantendo: $link" -ForegroundColor Yellow
+  } else {
+    cmd.exe /c "mklink /J `"$link`" `"$target`""
+  }
 }
 
 # Copia o serviço .mq5 para a raiz de Services (MetaEditor compila melhor assim)

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 CMD MT – CLI interativo unificado
-- socket (default): host/porta (serviço MT5 9090; gateway 9095 opcional)
+- socket (default): host/porta (gateway 127.0.0.1:9095 ou serviço MQL 9090)
 - file: cmd_*.txt / resp_*.txt (EA CommandListener/OficialTelnetListener)
 
 Comandos:
@@ -36,7 +36,7 @@ Comandos:
   glist [PREFIX [LIMIT]]
   compile ARQUIVO|NOME
   compile here
-  py JSON                  (PY_CALL)
+  py PAYLOAD               (PY_CALL)
   cmd TYPE [PARAMS...]     (envia TYPE direto)
   selftest [full]          (smoke test do serviço)
   raw <linha>
@@ -138,8 +138,10 @@ def parse_sym_tf(tokens, ctx):
 DEFAULT_SYMBOL = "EURUSD"
 DEFAULT_TF = "H1"
 DEFAULT_EA_BASE_TPL = "Moving Average.tpl"
-DEFAULT_HOSTS = "host.docker.internal"
+DEFAULT_HOSTS = "host.docker.internal,127.0.0.1"
 DEFAULT_PORT = 9090
+# handshake desabilitado por padrão (conexão direta no serviço)
+CMDMT_HELLO_ENABLED = os.environ.get("CMDMT_HELLO", "0") != "0"
 CMDMT_HELLO_LINE = os.environ.get("CMDMT_HELLO_LINE", "HELLO CMDMT")
 
 def find_terminal_data_dir():
@@ -509,12 +511,6 @@ class TransportSocket:
         self.host = host
         self.port = port
         self.timeout = timeout
-        env_hello = os.environ.get("CMDMT_HELLO")
-        if env_hello is None:
-            # padrão: sem HELLO quando conecta direto no serviço MT5 (9090)
-            self.send_hello = (self.port != 9090)
-        else:
-            self.send_hello = env_hello != "0"
         # suporte a fallback: "h1,h2;h3"
         self.hosts = []
         if host:
@@ -532,8 +528,8 @@ class TransportSocket:
             for _ in range(3):  # até 3 tentativas em caso de reset/timeout
                 try:
                     with socket.create_connection((host, self.port), timeout=self.timeout) as s:
-                        # handshake opcional
-                        if self.send_hello:
+                        # handshake (gateway single-port)
+                        if CMDMT_HELLO_ENABLED:
                             s.sendall((CMDMT_HELLO_LINE + "\n").encode("utf-8"))
                         s.sendall(line.encode("utf-8"))
                         data = b""
@@ -559,13 +555,6 @@ class TransportSocket:
 
 # ------------------- Parsing de comandos -------------------
 def parse_user_line(line: str, ctx):
-    line_strip = line.strip()
-    if line_strip.lower().startswith("py "):
-        payload = line_strip[3:].strip()
-        if not payload:
-            print("uso: py <json>")
-            return None
-        return "PY_CALL", [payload]
     try:
         parts = shlex.split(line.strip())
     except Exception:
@@ -792,7 +781,7 @@ def parse_user_line(line: str, ctx):
             "  obj_create TYPE NAME TIME PRICE TIME2 PRICE2\n"
             "  screenshot SYMBOL TF FILE WIDTH [HEIGHT]\n"
             "  screenshot_sweep ... | drop_info ...\n"
-            "  py JSON                      (PY_CALL)\n"
+            "  py PAYLOAD                   (PY_CALL)\n"
             "  compile ARQUIVO|NOME         (compila .mq5 via MetaEditor)\n"
             "  compile here                 (compila OficialTelnetServiceSocket.mq5)\n"
             "  cmd TYPE [PARAMS...]         (envia TYPE direto)\n"
@@ -891,6 +880,7 @@ def parse_user_line(line: str, ctx):
         elif len(r) >= 1 and is_tf(r[0]) and ctx.get("symbol"):
             sym = ctx.get("symbol"); tf = r[0]; r = r[1:]
         else:
+            # usa defaults; não interpreta o primeiro token como símbolo
             sym = ctx.get("symbol"); tf = ctx.get("tf")
         if not ensure_ctx(ctx, not sym, not tf): return None
         if not r:
@@ -937,6 +927,7 @@ def parse_user_line(line: str, ctx):
         elif len(r) >= 1 and is_tf(r[0]) and ctx.get("symbol"):
             sym = ctx.get("symbol"); tf = r[0]; r = r[1:]
         else:
+            # usa defaults; não interpreta o primeiro token como símbolo
             sym = ctx.get("symbol"); tf = ctx.get("tf")
         if not ensure_ctx(ctx, not sym, not tf): return None
         if not r:
@@ -1269,6 +1260,40 @@ def main():
         transport = TransportSocket(args.host, args.port, args.timeout)
         set_blue(); print(f"MT5 CLI (socket) {args.host}:{args.port}")
     print("Dica: digite help")
+
+    # tenta sincronizar defaults com um chart aberto (sem exigir SYMBOL/TF do usuário)
+    if isinstance(transport, TransportSocket):
+        try:
+            line_out = "|".join([gen_id(), "LIST_CHARTS"])
+            resp_txt = transport.send_text(line_out)
+            ok, msg, data = parse_response_text(resp_txt)
+            if ok and data:
+                parts = data[0].split("|")
+                if len(parts) >= 3:
+                    ctx["symbol"] = parts[1].strip()
+                    tf_raw = parts[2].strip()
+                    if tf_raw.upper().startswith("PERIOD_"):
+                        tf_raw = tf_raw[7:]
+                    if tf_raw.upper() != "CURRENT":
+                        ctx["tf"] = tf_raw
+            else:
+                line_out = "|".join([gen_id(), "DROP_INFO"])
+                resp_txt = transport.send_text(line_out)
+                ok, msg, data = parse_response_text(resp_txt)
+                if ok and data:
+                    first = data[0].strip()
+                    if first.lower().startswith("chart="):
+                        rest = first.split("=", 1)[1].strip()
+                        parts = rest.split()
+                        if len(parts) >= 2:
+                            ctx["symbol"] = parts[0]
+                            tf_raw = parts[1]
+                            if tf_raw.upper().startswith("PERIOD_"):
+                                tf_raw = tf_raw[7:]
+                            if tf_raw.upper() != "CURRENT":
+                                ctx["tf"] = tf_raw
+        except Exception:
+            pass
 
     # Fonte de comandos não interativa: positional, --seq, --file ou stdin pipe
     lines = None
