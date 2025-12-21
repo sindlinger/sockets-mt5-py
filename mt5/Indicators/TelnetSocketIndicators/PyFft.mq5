@@ -18,6 +18,7 @@ input bool   InpHalf = false;
 input bool   InpLog  = false;
 input bool   InpNorm = false;
 input string InpWindow = "hann"; // hann|hamming|blackman|"" (none)
+input bool   InpGPU  = true;     // força GPU no Python (se disponível)
 input bool   InpNewBarOnly = true;
 input string InpHost = "127.0.0.1";
 input int    InpPort = 9091;
@@ -183,6 +184,7 @@ string BuildFftName()
   name += "&log=" + (InpLog?"1":"0");
   name += "&norm=" + (InpNorm?"1":"0");
   if(InpWindow!="") name += "&win=" + InpWindow;
+  if(InpGPU) name += "&gpu=1";
   return name;
 }
 

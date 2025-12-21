@@ -39,8 +39,9 @@ Comandos:
   glist [PREFIX [LIMIT]]
   compile ARQUIVO|NOME
   compile here
+  hotkeys / hotkey
   tester [--root PATH] [--ini FILE] [--timeout SEC] [--width W --height H] [--minimized|--headless] (default 640x480)
-  run NOME --ind|--ea [SYMBOL] [TF] [3 dias] (tester simples)
+  run NOME --ind|--ea [SYMBOL] [TF] [3 dias] [--predownload] [--logtail N] [--quiet] (tester simples)
   logs [last|ARQUIVO.log] [N] (listar/mostrar logs do run)
   py PAYLOAD               (PY_CALL)
   cmd TYPE [PARAMS...]     (envia TYPE direto)
@@ -590,19 +591,28 @@ def _find_rach_root():
         base = Path("/mnt/c")
     for name in names:
         p = base / name
-        if p.exists():
-            candidates.append(p)
+        try:
+            if p.exists():
+                candidates.append(p)
+        except Exception:
+            pass
     # user folders
     for user in _list_windows_user_dirs():
         for name in names:
             p = user / name
-            if p.exists():
-                candidates.append(p)
+            try:
+                if p.exists():
+                    candidates.append(p)
+            except Exception:
+                pass
         for sub in ("Desktop", "Documents", "Downloads"):
             for name in names:
                 p = user / sub / name
-                if p.exists():
-                    candidates.append(p)
+                try:
+                    if p.exists():
+                        candidates.append(p)
+                except Exception:
+                    pass
     # prefer ones with terminal.exe
     for p in candidates:
         if _find_terminal_exe(p):
@@ -806,15 +816,87 @@ def _write_indicator_stub_set(data_dir, indicator_rel):
 def _ensure_indicator_stub(data_dir):
     _ensure_dirs(data_dir)
     dst = Path(data_dir) / "MQL5" / "Experts" / "IndicatorStub.ex5"
-    if dst.exists():
-        return dst
     repo = _find_repo_root(Path.cwd())
+    src_ex5 = None
+    src_mq5 = None
     if repo:
-        src = repo / "IndicatorStub.ex5"
-        if src.exists():
-            shutil.copy2(src, dst)
-            return dst
+        cand = repo / "IndicatorStub.ex5"
+        cand_mq5 = repo / "IndicatorStub.mq5"
+        if cand.exists():
+            src_ex5 = cand
+        if cand_mq5.exists():
+            src_mq5 = cand_mq5
+    if not src_ex5 or not src_mq5:
+        # fallback: procura no diretório pai (mt5-shellscripts)
+        try:
+            parent = Path.cwd().resolve().parent
+            cand = parent / "IndicatorStub.ex5"
+            cand_mq5 = parent / "IndicatorStub.mq5"
+            if cand.exists():
+                src_ex5 = cand
+            if cand_mq5.exists():
+                src_mq5 = cand_mq5
+        except Exception:
+            pass
+    if not src_ex5 and not src_mq5:
+        return dst if dst.exists() else None
+
+    # se existir mq5 mais novo, compila no diretório do terminal
+    try:
+        dst_mq5 = dst.with_suffix(".mq5")
+        if src_mq5 and (not dst.exists() or not dst_mq5.exists() or src_mq5.stat().st_mtime > dst.stat().st_mtime):
+            shutil.copy2(src_mq5, dst_mq5)
+            _compile_mq5_path(dst_mq5)
+    except Exception:
+        pass
+
+    # fallback: copia ex5 se necessário
+    try:
+        if src_ex5 and ((not dst.exists()) or (src_ex5.stat().st_mtime > dst.stat().st_mtime)):
+            shutil.copy2(src_ex5, dst)
+    except Exception:
+        if not dst.exists():
+            return None
+    return dst
+
+def _ensure_predownload_script(data_dir):
+    scripts_dir = Path(data_dir) / "MQL5" / "Scripts"
+    scripts_dir.mkdir(parents=True, exist_ok=True)
+    dst_mq5 = scripts_dir / "CmdmtPreDownload.mq5"
+    repo = _find_repo_root(Path.cwd())
+    src_mq5 = None
+    if repo:
+        cand = repo / "CmdmtPreDownload.mq5"
+        if cand.exists():
+            src_mq5 = cand
+    if not src_mq5:
+        try:
+            parent = Path.cwd().resolve().parent
+            cand = parent / "CmdmtPreDownload.mq5"
+            if cand.exists():
+                src_mq5 = cand
+        except Exception:
+            src_mq5 = None
+    if src_mq5:
+        try:
+            if (not dst_mq5.exists()) or (src_mq5.stat().st_mtime > dst_mq5.stat().st_mtime):
+                shutil.copy2(src_mq5, dst_mq5)
+        except Exception:
+            pass
+    if dst_mq5.exists():
+        _compile_mq5_path(dst_mq5)
+        ex5 = dst_mq5.with_suffix(".ex5")
+        if ex5.exists():
+            return "CmdmtPreDownload"
     return None
+
+def _write_predownload_set(data_dir, days_back=30, bars_target=0):
+    presets_dir = Path(data_dir) / "MQL5" / "Presets"
+    presets_dir.mkdir(parents=True, exist_ok=True)
+    set_path = presets_dir / "CmdmtPreDownload.set"
+    txt = f"DaysBack={int(days_back)}\nBarsTarget={int(bars_target)}\n"
+    set_path.write_text(txt, encoding="utf-8")
+    return set_path
 
 def _is_existing_path(p: str) -> bool:
     try:
@@ -822,10 +904,42 @@ def _is_existing_path(p: str) -> bool:
     except Exception:
         return False
 
+def _is_wsl() -> bool:
+    if os.environ.get("WSL_DISTRO_NAME") or os.environ.get("WSL_INTEROP"):
+        return True
+    try:
+        return "microsoft" in Path("/proc/version").read_text().lower()
+    except Exception:
+        return False
+
+def _is_mnt_path(p: Path) -> bool:
+    try:
+        s = str(p).replace("\\", "/").lower()
+        return s.startswith("/mnt/")
+    except Exception:
+        return False
+
 def _safe_symlink(src: Path, dst: Path) -> bool:
     try:
         if dst.exists():
             return True
+    except Exception:
+        pass
+    # Em WSL, prefira mklink/junction para o MT5 (Windows) enxergar corretamente
+    if _is_wsl() and _is_mnt_path(src) and _is_mnt_path(dst):
+        try:
+            dst_win = to_windows_path(str(dst))
+            src_win = to_windows_path(str(src))
+            if src.is_dir():
+                cmd = ["cmd.exe", "/c", "mklink", "/J", dst_win, src_win]
+            else:
+                cmd = ["cmd.exe", "/c", "mklink", "/H", dst_win, src_win]
+            res = subprocess.run(cmd, capture_output=True)
+            if res.returncode == 0:
+                return True
+        except Exception:
+            pass
+    try:
         os.symlink(str(src), str(dst))
         return True
     except Exception:
@@ -851,29 +965,62 @@ def _prepare_external_file(src_path: Path, data_dir: Path, target_kind: str):
     # target_kind: "Indicators" or "Experts"
     cleanup = []
     src_path = Path(src_path)
+    orig_src = src_path
     if src_path.is_dir():
         print("ERROR passe um arquivo .ex5 ou .mq5, não pasta")
         return None, cleanup
     base = Path(data_dir) / "MQL5" / target_kind
     base.mkdir(parents=True, exist_ok=True)
-    # prefer .ex5 if available
-    if src_path.suffix.lower() == ".mq5":
-        ex5 = src_path.with_suffix(".ex5")
-        if ex5.exists():
-            src_path = ex5
-    rel_name = _strip_ext(src_path.name)
-    dst = base / src_path.name
-    if _safe_symlink(src_path, dst):
-        if dst.is_symlink():
-            cleanup.append(dst)
+    # se o usuário passou .mq5, compilar no terminal local (evita ex5 com build incompatível)
+    # decide se cria link/copia de diretório
+    parent_name = src_path.parent.name.lower()
+    use_dir = parent_name not in ("indicators", "experts")
+    if use_dir:
+        dir_name = src_path.parent.name
+        dst_dir = base / dir_name
+        dst_existed = dst_dir.exists()
+        if dst_existed and dst_dir.is_symlink():
+            try:
+                dst_dir.unlink()
+                dst_existed = False
+            except Exception:
+                pass
+        try:
+            if not dst_existed:
+                cleanup.append((dst_dir, "copydir"))
+            shutil.copytree(src_path.parent, dst_dir, dirs_exist_ok=True)
+        except Exception as e:
+            print("ERROR não foi possível copiar diretório: " + str(e))
+            return None, cleanup
+        rel_name = dir_name + "\\" + _strip_ext(src_path.name)
+        dst = dst_dir / src_path.name
     else:
-        # fallback: copia se não puder linkar
+        rel_name = _strip_ext(src_path.name)
+        dst = base / src_path.name
+        dst_existed = dst.exists()
+        if dst_existed and dst.is_symlink():
+            try:
+                dst.unlink()
+                dst_existed = False
+            except Exception:
+                pass
+        if not dst_existed:
+            cleanup.append((dst, "copyfile"))
         shutil.copy2(src_path, dst)
+
     # if mq5, compile in place
     if dst.suffix.lower() == ".mq5":
         okc = _compile_mq5_path(dst)
-        ex5 = dst.with_suffix(".ex5")
-        if not okc or not ex5.exists():
+        ex5_dst = dst.with_suffix(".ex5")
+        if not ex5_dst.exists():
+            # tenta usar ex5 gerado no diretório origem
+            src_ex5 = orig_src.with_suffix(".ex5")
+            if src_ex5.exists():
+                ex5_existed = ex5_dst.exists()
+                if not ex5_existed:
+                    cleanup.append((ex5_dst, "copyfile"))
+                shutil.copy2(src_ex5, ex5_dst)
+        if not okc or not ex5_dst.exists():
             print("ERROR compilação falhou para " + str(dst))
             return None, cleanup
     return rel_name, cleanup
@@ -917,17 +1064,57 @@ def _parse_dates(tokens):
         return dates[0], dates[1]
     return None, None
 
+def _wants_last_month(tokens):
+    txt = " ".join(tokens).lower()
+    # aceita variações simples
+    if "ultimo mes" in txt or "último mês" in txt or "mes passado" in txt or "mês passado" in txt:
+        return True
+    return False
+
 def run_simple(tokens, ctx):
     if not tokens:
-        print("uso: run NOME --ind|--ea [SYMBOL] [TF] [3 dias]")
+        print("uso: run NOME --ind|--ea [SYMBOL] [TF] [3 dias] [--predownload] [--logtail N] [--quiet]")
         return
+    predownload = os.environ.get("CMDMT_PREDOWNLOAD", "0").strip().lower() not in ("0", "false", "no")
+    logtail = None
+    quiet = False
     name_parts = []
     rest = []
-    for t in tokens:
+    i = 0
+    while i < len(tokens):
+        t = tokens[i]
+        low = t.lower()
+        if low in ("--predownload", "--pre", "--pre-download"):
+            predownload = True
+            i += 1
+            continue
+        if low in ("--no-predownload", "--nopredownload"):
+            predownload = False
+            i += 1
+            continue
+        if low in ("--quiet", "--silent", "-q"):
+            quiet = True
+            i += 1
+            continue
+        if low.startswith("--logtail=") or low.startswith("--log="):
+            _, val = t.split("=", 1)
+            if val.isdigit():
+                logtail = int(val)
+            i += 1
+            continue
+        if low in ("--logtail", "--log"):
+            i += 1
+            if i < len(tokens) and tokens[i].isdigit():
+                logtail = int(tokens[i])
+                i += 1
+                continue
+            # sem valor, ignora
+            continue
         if t.startswith("--"):
             rest.append(t)
         else:
             name_parts.append(t)
+        i += 1
     mode = None
     for t in rest:
         low = t.lower()
@@ -936,7 +1123,7 @@ def run_simple(tokens, ctx):
         if low in ("--ea", "--expert"):
             mode = "ea"
     if not name_parts:
-        print("uso: run NOME --ind|--ea [SYMBOL] [TF] [3 dias]")
+        print("uso: run NOME --ind|--ea [SYMBOL] [TF] [3 dias] [--predownload] [--logtail N] [--quiet]")
         return
     if mode is None:
         print("erro: informe se é indicador ou expert usando --ind ou --ea")
@@ -957,16 +1144,32 @@ def run_simple(tokens, ctx):
         tf = ctx.get("tf") or DEFAULT_TF
     prog_name = " ".join(name_parts).strip()
     if not prog_name:
-        print("uso: run NOME --ind|--ea [SYMBOL] [TF] [3 dias]")
+        print("uso: run NOME --ind|--ea [SYMBOL] [TF] [3 dias] [--predownload] [--logtail N] [--quiet]")
         return
 
     from_d, to_d = _parse_dates(tokens)
     if not from_d or not to_d:
-        ndays = _parse_days(tokens) or 3
         today = datetime.now().date()
-        start = today - timedelta(days=ndays)
-        from_d = start.strftime("%Y.%m.%d")
-        to_d = today.strftime("%Y.%m.%d")
+        if _wants_last_month(tokens):
+            # primeiro e último dia do mês anterior
+            first_this = today.replace(day=1)
+            last_prev = first_this - timedelta(days=1)
+            first_prev = last_prev.replace(day=1)
+            from_d = first_prev.strftime("%Y.%m.%d")
+            to_d = last_prev.strftime("%Y.%m.%d")
+        else:
+            ndays = _parse_days(tokens)
+            if ndays is not None:
+                start = today - timedelta(days=ndays)
+                from_d = start.strftime("%Y.%m.%d")
+                to_d = today.strftime("%Y.%m.%d")
+            else:
+                # default: último mês (mês calendário anterior)
+                first_this = today.replace(day=1)
+                last_prev = first_this - timedelta(days=1)
+                first_prev = last_prev.replace(day=1)
+                from_d = first_prev.strftime("%Y.%m.%d")
+                to_d = last_prev.strftime("%Y.%m.%d")
 
     root = _find_rach_root()
     if not root:
@@ -1034,19 +1237,92 @@ def run_simple(tokens, ctx):
         ("Tester", "ShutdownTerminal", "1"),
     ]
 
+    # defaults via env (para não pedir login na linha de comando)
+    env_login = os.environ.get("CMDMT_TESTER_LOGIN", "").strip()
+    env_pass  = os.environ.get("CMDMT_TESTER_PASSWORD", "").strip()
+    env_srv   = os.environ.get("CMDMT_TESTER_SERVER", "").strip()
+    if env_login:
+        overrides.append(("Tester", "Login", env_login))
+        overrides.append(("Common", "Login", env_login))
+    if env_pass:
+        overrides.append(("Common", "Password", env_pass))
+    if env_srv:
+        overrides.append(("Common", "Server", env_srv))
+
+    # predownload de histórico (antes do teste)
+    if predownload:
+        pre_name = _ensure_predownload_script(data_dir)
+        if pre_name:
+            days_back = 30
+            try:
+                fd = datetime.strptime(from_d, "%Y.%m.%d").date()
+                td = datetime.strptime(to_d, "%Y.%m.%d").date()
+                days_back = max(1, (td - fd).days + 1)
+            except Exception:
+                pass
+            _write_predownload_set(data_dir, days_back=days_back, bars_target=0)
+            pre_tokens = [
+                "--root", str(root),
+                "--timeout", "60",
+                "--minimized",
+                "--portable",
+                "--set", f"StartUp.Script={pre_name}",
+                "--set", "StartUp.ScriptParameters=CmdmtPreDownload.set",
+                "--set", f"StartUp.Symbol={sym}",
+                "--set", f"StartUp.Period={tf}",
+                "--set", "StartUp.ShutdownTerminal=1",
+                "--set", "Tester.Expert=",
+                "--set", "Tester.ExpertParameters=",
+            ]
+            if logtail is not None:
+                pre_tokens += ["--logtail", str(logtail)]
+            if quiet:
+                pre_tokens += ["--quiet"]
+            if env_login:
+                pre_tokens += ["--set", f"Common.Login={env_login}"]
+            if env_pass:
+                pre_tokens += ["--set", f"Common.Password={env_pass}"]
+            if env_srv:
+                pre_tokens += ["--set", f"Common.Server={env_srv}"]
+            run_mt5_tester(pre_tokens)
+
     tester_tokens = [
         "--root", str(root),
         "--timeout", "60",
         "--minimized",
+        "--portable",
     ]
+    if logtail is not None:
+        tester_tokens += ["--logtail", str(logtail)]
+    if quiet:
+        tester_tokens += ["--quiet"]
     for sec, key, val in overrides:
         tester_tokens += ["--set", f"{sec}.{key}={val}"]
     run_mt5_tester(tester_tokens)
-    # cleanup symlinks
-    for p in cleanup:
+    # cleanup links/copias criadas em tempo de execução
+    for item in cleanup:
         try:
-            if p.is_symlink():
-                p.unlink()
+            if isinstance(item, tuple):
+                p, kind = item
+            else:
+                p, kind = item, "linkdir" if item.is_dir() else "linkfile"
+            if kind == "copydir":
+                shutil.rmtree(p, ignore_errors=True)
+            elif kind == "copyfile":
+                try:
+                    p.unlink()
+                except Exception:
+                    pass
+            elif kind == "linkdir":
+                try:
+                    p.rmdir()
+                except Exception:
+                    pass
+            else:
+                try:
+                    p.unlink()
+                except Exception:
+                    pass
         except Exception:
             pass
 
@@ -1061,8 +1337,10 @@ def run_mt5_tester(tokens):
         "headless": False,
         "minimized": False,
         "portable": None,
-        "logtail": 200,
+        "logtail": 50,
+        "quiet": False,
         "screenshot": None,
+        "screenshot_enabled": False,
         "buffers": True,
         "set": [],
     }
@@ -1097,12 +1375,20 @@ def run_mt5_tester(tokens):
             opts["portable"] = True
         elif t == "--no-portable":
             opts["portable"] = False
-        elif t == "--logtail":
+        elif t in ("--logtail", "--log"):
             i += 1
             if i < len(tokens) and tokens[i].isdigit():
                 opts["logtail"] = int(tokens[i])
+        elif t in ("--quiet", "--silent", "-q"):
+            opts["quiet"] = True
         elif t == "--screenshot":
-            i += 1; opts["screenshot"] = tokens[i] if i < len(tokens) else None
+            i += 1
+            opts["screenshot"] = tokens[i] if i < len(tokens) else None
+            opts["screenshot_enabled"] = True
+        elif t == "--screenshot-on":
+            opts["screenshot_enabled"] = True
+        elif t == "--no-screenshot":
+            opts["screenshot_enabled"] = False
         elif t in ("--set", "-S"):
             i += 1
             if i < len(tokens):
@@ -1195,7 +1481,8 @@ def run_mt5_tester(tokens):
 
     tester_expert = str(ini_map.get("Tester", {}).get("Expert", "")).strip()
     startup_expert = str(ini_map.get("StartUp", {}).get("Expert", "")).strip()
-    if not tester_expert and not startup_expert:
+    startup_script = str(ini_map.get("StartUp", {}).get("Script", "")).strip()
+    if not tester_expert and not startup_expert and not startup_script:
         print("ERROR Tester.Expert vazio (use --expert ou --set Tester.Expert=...)")
         return False
 
@@ -1217,14 +1504,19 @@ def run_mt5_tester(tokens):
     except Exception:
         pass
 
-    cmd = [to_windows_path(str(exe)), f"/config:{to_windows_path(str(ini_use))}"]
+    exe_cmd = to_windows_path(str(exe)) if os.name == "nt" else str(exe)
+    cmd = [exe_cmd, f"/config:{to_windows_path(str(ini_use))}"]
     if opts["portable"] is True or ((root / "MQL5").exists() and opts["portable"] is not False):
         cmd.append("/portable")
 
+    def _qprint(msg):
+        if not opts["quiet"]:
+            print(msg)
+
     start_ts = time.time()
-    print(f"tester: root={root}")
-    print(f"tester: exe={exe}")
-    print(f"tester: ini={ini_use}")
+    _qprint(f"tester: root={root}")
+    _qprint(f"tester: exe={exe}")
+    _qprint(f"tester: ini={ini_use}")
     try:
         if os.name == "nt":
             startupinfo = None
@@ -1261,18 +1553,38 @@ def run_mt5_tester(tokens):
     run_dir = _ensure_run_logs_dir()
     run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_log = run_dir / f"run_{run_stamp}.log"
-    logs_dir = data_dir / "MQL5" / "Logs"
-    tlogs_dir = data_dir / "MQL5" / "Tester" / "Logs"
-    latest_term = _latest_file(logs_dir, exts={".log"}, after_ts=start_ts)
-    latest_test = _latest_file(tlogs_dir, exts={".log"}, after_ts=start_ts)
+    _append_run_log(run_log, "run", [
+        f"root={data_dir}",
+        f"exe={exe}",
+        f"ini={ini_use}",
+        f"start_ts={start_ts}",
+    ])
+    logs_dirs = [data_dir / "MQL5" / "Logs", data_dir / "Logs"]
+    tlogs_dirs = [data_dir / "MQL5" / "Tester" / "Logs", data_dir / "Tester" / "Logs"]
+    latest_term = None
+    for d in logs_dirs:
+        cand = _latest_file(d, exts={".log"}, after_ts=start_ts)
+        if cand and (not latest_term or cand.stat().st_mtime > latest_term.stat().st_mtime):
+            latest_term = cand
+    latest_test = None
+    for d in tlogs_dirs:
+        cand = _latest_file(d, exts={".log"}, after_ts=start_ts)
+        if cand and (not latest_test or cand.stat().st_mtime > latest_test.stat().st_mtime):
+            latest_test = cand
     if latest_term:
         lines = _tail_lines(latest_term, opts["logtail"])
-        _print_block(f"terminal log: {latest_term}", lines)
+        if not opts["quiet"]:
+            _print_block(f"terminal log: {latest_term}", lines)
         _append_run_log(run_log, f"terminal log: {latest_term}", lines)
+    else:
+        _append_run_log(run_log, "terminal log: (none)", [])
     if latest_test:
         lines = _tail_lines(latest_test, opts["logtail"])
-        _print_block(f"tester log: {latest_test}", lines)
+        if not opts["quiet"]:
+            _print_block(f"tester log: {latest_test}", lines)
         _append_run_log(run_log, f"tester log: {latest_test}", lines)
+    else:
+        _append_run_log(run_log, "tester log: (none)", [])
 
     # buffers (heurística: linhas com 'buffer' nos logs)
     if opts["buffers"]:
@@ -1282,31 +1594,60 @@ def run_mt5_tester(tokens):
             lines = _tail_lines(log, max(200, opts["logtail"]))
             hits = [ln for ln in lines if re.search(r"buffer", ln, re.I)]
             if hits:
-                _print_block(f"buffers em {log.name}", hits[-50:])
+                if not opts["quiet"]:
+                    _print_block(f"buffers em {log.name}", hits[-50:])
                 _append_run_log(run_log, f"buffers em {log.name}", hits[-50:])
 
-    # screenshot: procura imagens recentes
-    shot_dirs = [data_dir / "MQL5" / "Tester" / "Files", data_dir / "MQL5" / "Files"]
+    # screenshot (desativado por padrão)
     latest_shot = None
-    for d in shot_dirs:
-        shot = _latest_file(d, exts={".png", ".jpg", ".jpeg"}, after_ts=start_ts)
-        if shot and (not latest_shot or shot.stat().st_mtime > latest_shot.stat().st_mtime):
-            latest_shot = shot
+    if opts["screenshot_enabled"]:
+        shot_dirs = [
+            data_dir / "MQL5" / "Tester" / "Files",
+            data_dir / "MQL5" / "Files",
+            data_dir / "Tester" / "Files",
+            data_dir / "Files",
+        ]
+        for d in shot_dirs:
+            shot = _latest_file(d, exts={".png", ".jpg", ".jpeg"}, after_ts=start_ts)
+            if shot and (not latest_shot or shot.stat().st_mtime > latest_shot.stat().st_mtime):
+                latest_shot = shot
     # dados (buffers) em arquivo, se existirem
-    data_dir_t = data_dir / "MQL5" / "Tester" / "Files"
-    data_latest = _latest_file(data_dir_t, exts={".txt", ".csv"}, after_ts=start_ts)
+    data_dirs = [
+        data_dir / "MQL5" / "Tester" / "Files",
+        data_dir / "Tester" / "Files",
+        data_dir / "MQL5" / "Files",
+        data_dir / "Files",
+    ]
+    # arquivos do agente do tester (onde o stub escreve)
+    try:
+        agent_base = data_dir / "Tester"
+        if agent_base.exists():
+            agents = sorted([p for p in agent_base.glob("Agent-*") if p.is_dir()], key=lambda p: p.stat().st_mtime, reverse=True)
+            for a in agents[:3]:
+                data_dirs.insert(0, a / "MQL5" / "Files")
+                data_dirs.insert(0, a / "Files")
+    except Exception:
+        pass
+    data_latest = None
+    for d in data_dirs:
+        cand = _latest_file(d, exts={".txt", ".csv"}, after_ts=start_ts)
+        if cand and (not data_latest or cand.stat().st_mtime > data_latest.stat().st_mtime):
+            data_latest = cand
     if data_latest:
         lines = _tail_lines(data_latest, 50)
-        _print_block(f"data file: {data_latest}", lines)
+        if not opts["quiet"]:
+            _print_block(f"data file: {data_latest}", lines)
         _append_run_log(run_log, f"data file: {data_latest}", lines)
+    else:
+        _append_run_log(run_log, "data file: (none)", [])
     if latest_shot:
-        print(f"screenshot: {latest_shot}")
+        _qprint(f"screenshot: {latest_shot}")
         _append_run_log(run_log, "screenshot: " + str(latest_shot), [])
         # copia screenshot para run_logs
         try:
             dst = run_dir / f"run_{run_stamp}{latest_shot.suffix.lower()}"
             shutil.copy2(latest_shot, dst)
-            print(f"run_screenshot: {dst}")
+            _qprint(f"run_screenshot: {dst}")
         except Exception as e:
             print(f"ERROR screenshot_copy {e}")
         if opts["screenshot"]:
@@ -1314,11 +1655,15 @@ def run_mt5_tester(tokens):
                 dst = Path(maybe_wslpath(opts["screenshot"]))
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(latest_shot, dst)
-                print(f"screenshot_copy: {dst}")
+                _qprint(f"screenshot_copy: {dst}")
             except Exception as e:
                 print(f"ERROR screenshot_copy {e}")
     else:
-        print("screenshot: não encontrado (use ChartScreenShot no EA/indicador ou TestVisualization)")
+        if opts["screenshot_enabled"] and not opts["quiet"]:
+            print("screenshot: não encontrado (use ChartScreenShot no EA/indicador ou TestVisualization)")
+        _append_run_log(run_log, "screenshot: (none)", [])
+    if opts["quiet"]:
+        print(f"run_log: {run_log}")
     return True
 
 def _split_hosts(hosts: str):
@@ -1371,6 +1716,51 @@ def _state_dir():
         p = Path.home() / ".cmdmt"
     p.mkdir(parents=True, exist_ok=True)
     return p
+
+
+def _hotkeys_path():
+    env = os.environ.get("CMDMT_HOTKEYS_FILE")
+    if env:
+        return Path(maybe_wslpath(env))
+    return _state_dir() / "hotkeys.json"
+
+def _load_hotkeys():
+    path = _hotkeys_path()
+    if not path.exists():
+        return {}
+    try:
+        txt, _, _ = _read_text_auto(path)
+        data = json.loads(txt)
+        if isinstance(data, dict):
+            # normaliza para str->str
+            out = {}
+            for k, v in data.items():
+                if isinstance(k, str) and isinstance(v, str):
+                    out[k.strip().upper()] = v.strip()
+            return out
+    except Exception:
+        pass
+    return {}
+
+def _save_hotkeys(hk: dict):
+    path = _hotkeys_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = {}
+    for k, v in hk.items():
+        if not k:
+            continue
+        data[str(k).strip().upper()] = str(v)
+    _write_text_auto(path, json.dumps(data, indent=2, ensure_ascii=False) + "\n", "utf-8", b"")
+    return path
+
+def _normalize_hotkey_name(name: str) -> str:
+    if name is None:
+        return ""
+    n = str(name).strip()
+    # aceita apenas @prefixo, não @no-fim
+    if n.startswith("@"):
+        n = n[1:]
+    return n.strip().upper()
 
 def _pybridge_pid_path():
     return _state_dir() / "pybridge.pid"
@@ -2135,11 +2525,19 @@ def parse_user_line(line: str, ctx):
             "  pybridge start|stop|status\n"
             "  pybridge ping [HOST] [PORT]\n"
             "  pybridge ensure [HOST] [PORT]\n"
+            "  hotkeys                       (lista hotkeys e uso)\n"
+            "  cmd+hotkeys                   (lista + exemplo)\n"
+            "  hotkey save NOME \"CMD; CMD\"  (salva sequência)\n"
+            "  hotkey run NOME | hotkey show NOME | hotkey del NOME\n"
+            "  hotkey <sequencia> [save NOME] (executa ou salva)\n"
+            "  digite NOME ou @NOME           (executa hotkey salva; '@' só no começo)\n"
             "  tester [--root PATH] [--ini FILE] [--timeout SEC] [--width W --height H]\n"
-            "         [--headless|--minimized] [--portable|--no-portable] [--logtail N] [--screenshot PATH]\n"
+            "         [--headless|--minimized] [--portable|--no-portable] [--logtail N|--log N] [--quiet]\n"
+            "         [--screenshot PATH|--screenshot-on|--no-screenshot]\n"
             "         [--set Section.Key=Val ...] (ex: --set Tester.Expert=Examples\\\\MACD\\\\MACD Sample)\n"
             "         (default size: 640x480, ShutdownTerminal=1)\n"
-            "  run NOME --ind|--ea [SYMBOL] [TF] [3 dias] (tester simples)\n"
+            "  run NOME --ind|--ea [SYMBOL] [TF] [3 dias] [--predownload] [--logtail N] [--quiet] (tester simples)\n"
+            "    env: CMDMT_TESTER_LOGIN / CMDMT_TESTER_PASSWORD / CMDMT_TESTER_SERVER\n"
             "  logs [last|ARQUIVO.log] [N] (listar/mostrar logs do run)\n"
             "  cmd TYPE [PARAMS...]         (envia TYPE direto)\n"
             "  PY_CONNECT | PY_DISCONNECT   (via cmd TYPE ...)\n"
@@ -2162,6 +2560,28 @@ def parse_user_line(line: str, ctx):
         return "OPEN_CHART", [sym, tf]
     if cmd in ("charts", "listcharts"):
         return "LIST_CHARTS", []
+    if cmd in ("cmd+hotkeys", "cmd+hotkey"):
+        return "HOTKEY_HELP", ["full"]
+    if cmd in ("hotkeys", "hotkey", "hk"):
+        # hotkeys -> lista/uso; hotkey <seq> [save NAME] -> salva ou executa
+        if len(parts) == 1:
+            return "HOTKEY_HELP", []
+        action = parts[1].lower()
+        if action in ("list", "ls"):
+            return "HOTKEY_LIST", []
+        if action in ("show", "get") and len(parts) >= 3:
+            return "HOTKEY_SHOW", [_normalize_hotkey_name(parts[2])]
+        if action in ("del", "rm", "remove") and len(parts) >= 3:
+            return "HOTKEY_DEL", [_normalize_hotkey_name(parts[2])]
+        if action in ("save", "set") and len(parts) >= 4:
+            name = _normalize_hotkey_name(parts[2])
+            seq = " ".join(parts[3:]).strip()
+            return "HOTKEY_SAVE", [name, seq]
+        if action in ("run", "exec") and len(parts) >= 3:
+            return "HOTKEY_RUN", [_normalize_hotkey_name(parts[2])]
+        # caso geral: hotkey <sequencia> [save NOME]
+        seq = " ".join(parts[1:]).strip()
+        return "HOTKEY_INLINE", [seq]
     if cmd == "buy" and len(parts) >= 2:
         r = parts[1:]
         if is_number(r[0]):
@@ -2628,7 +3048,12 @@ def main():
     ap.add_argument("--seq", help="sequência de comandos separados por ';' (modo não interativo)", default=None)
     ap.add_argument("--file", help="arquivo texto com um comando por linha (modo não interativo)", default=None)
     ap.add_argument("command", nargs="*", help="comando direto (ex: ping, \"chart list\")")
-    args = ap.parse_args()
+    args, extra = ap.parse_known_args()
+    # anexa argumentos desconhecidos ao comando (ex: --ind/--ea no modo direto)
+    if extra:
+        if args.command is None:
+            args.command = []
+        args.command.extend(extra)
 
     ctx = {}
     ctx["symbol"] = args.symbol or DEFAULT_SYMBOL
@@ -2699,6 +3124,32 @@ def main():
         lines = [ln.rstrip("\n") for ln in sys.stdin.readlines() if ln.strip()!=""]
 
     def process_line(line: str):
+        # permite chamar hotkey só digitando o código (ex: A1 ou @A1)
+        line_str = line.strip()
+        if line_str:
+            hk = _load_hotkeys()
+            key = _normalize_hotkey_name(line_str)
+            if key in hk:
+                # executa e retorna (com proteção de recursão)
+                def _run_direct_hotkey(code: str, stack=None):
+                    if stack is None:
+                        stack = []
+                    if code in stack:
+                        print(f"ERROR hotkey recursion: {' -> '.join(stack+[code])}")
+                        return
+                    seq = hk.get(code, "")
+                    if not seq:
+                        print(f"ERROR hotkey not found: {code}")
+                        return
+                    stack.append(code)
+                    for ln in split_seq_line(seq):
+                        ln = ln.strip()
+                        if not ln:
+                            continue
+                        process_line(ln)
+                    stack.pop()
+                _run_direct_hotkey(key)
+                return
         parsed = parse_user_line(line, ctx)
         if not parsed:
             return
@@ -2716,10 +3167,119 @@ def main():
                 data = lines_out[2:]
                 return ok, msg, data
             return False, txt, []
+        def run_hotkey(code: str, stack=None):
+            if stack is None:
+                stack = []
+            if code in stack:
+                print(f"ERROR hotkey recursion: {' -> '.join(stack+[code])}")
+                return
+            hk = _load_hotkeys()
+            if code not in hk:
+                print(f"ERROR hotkey not found: {code}")
+                return
+            seq = hk[code]
+            stack.append(code)
+            for ln in split_seq_line(seq):
+                ln = ln.strip()
+                if not ln:
+                    continue
+                # permite chamar outro hotkey via linha "hotkey run X"
+                process_line(ln)
+            stack.pop()
         try:
             if cmd_type == "SELFTEST":
                 mode = params[0] if params else "quick"
                 run_selftest(transport, ctx, mode)
+                return
+            if cmd_type == "HOTKEY_HELP":
+                hk = _load_hotkeys()
+                print("Hotkeys (atalhos CMDMT):")
+                if hk:
+                    for k in sorted(hk.keys()):
+                        print(f"  {k} -> {hk[k]}")
+                else:
+                    print("  (vazio)")
+                print("")
+                print("Uso:")
+                print("  hotkey save NOME \"CMD; CMD\"")
+                print("  hotkey run NOME | hotkey show NOME | hotkey del NOME")
+                print("  hotkey <sequencia> [save NOME]")
+                print("  digite NOME ou @NOME (somente @ no inicio)")
+                if params and params[0] == "full":
+                    print("")
+                    print("Exemplo:")
+                    print("  hotkey save salvar \"open EURUSD H1; attachind ZigZag 1\"")
+                    print("  salvar")
+                return
+            if cmd_type == "HOTKEY_LIST":
+                hk = _load_hotkeys()
+                if not hk:
+                    print("hotkeys: (vazio)")
+                else:
+                    for k in sorted(hk.keys()):
+                        print(f"{k} -> {hk[k]}")
+                return
+            if cmd_type == "HOTKEY_SHOW":
+                code = _normalize_hotkey_name(params[0]) if params else ""
+                hk = _load_hotkeys()
+                if code in hk:
+                    print(f"{code} -> {hk[code]}")
+                else:
+                    print(f"ERROR hotkey not found: {code}")
+                return
+            if cmd_type == "HOTKEY_SAVE":
+                name = _normalize_hotkey_name(params[0]) if params else ""
+                seq = params[1] if len(params) >= 2 else ""
+                if not name or not seq:
+                    print("uso: hotkey save NOME \"CMD; CMD\"")
+                    return
+                code = name.strip().upper()
+                hk = _load_hotkeys()
+                hk[code] = seq
+                path = _save_hotkeys(hk)
+                print(f"OK hotkey {code} salvo em {path}")
+                return
+            if cmd_type == "HOTKEY_DEL":
+                code = _normalize_hotkey_name(params[0]) if params else ""
+                hk = _load_hotkeys()
+                if code in hk:
+                    hk.pop(code, None)
+                    path = _save_hotkeys(hk)
+                    print(f"OK hotkey {code} removido ({path})")
+                else:
+                    print(f"ERROR hotkey not found: {code}")
+                return
+            if cmd_type == "HOTKEY_RUN":
+                code = params[0] if params else ""
+                if not code:
+                    print("uso: hotkey run NOME")
+                    return
+                run_hotkey(code)
+                return
+            if cmd_type == "HOTKEY_INLINE":
+                seq = params[0] if params else ""
+                if not seq:
+                    print("uso: hotkey <sequencia> [save NOME]")
+                    return
+                # se termina com "save NOME", salva; senão executa
+                words = shlex.split(seq)
+                if len(words) >= 2 and words[-2].lower() in ("save", "salvar"):
+                    name = _normalize_hotkey_name(words[-1])
+                    real_seq = " ".join(words[:-2]).strip()
+                    if not real_seq:
+                        print("uso: hotkey <sequencia> save NOME")
+                        return
+                    hk = _load_hotkeys()
+                    hk[name] = real_seq
+                    path = _save_hotkeys(hk)
+                    print(f"OK hotkey {name} salvo em {path}")
+                else:
+                    # executa sequência imediata
+                    for ln in split_seq_line(seq):
+                        ln = ln.strip()
+                        if not ln:
+                            continue
+                        process_line(ln)
                 return
             if cmd_type == "COMPILE":
                 target = params[0] if params else ""

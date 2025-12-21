@@ -137,7 +137,12 @@ def _array_fft(arr, opts: dict[str, str], dtype: str):
     log = _bool(opts.get("log", "0"))
     norm = _bool(opts.get("norm", "0"))
     win = opts.get("win", "")
-    use_gpu = cp is not None
+    if "gpu" in opts:
+        use_gpu = _bool(opts.get("gpu", "0"))
+    elif "cpu" in opts:
+        use_gpu = not _bool(opts.get("cpu", "0"))
+    else:
+        use_gpu = cp is not None
     arr = _apply_window(arr, win)
     out = _fft_mag(arr, use_gpu, half)
     if norm:
@@ -149,11 +154,25 @@ def _array_fft(arr, opts: dict[str, str], dtype: str):
     return out
 
 
+def _array_fft_gpu(arr, opts: dict[str, str], dtype: str):
+    opts = dict(opts)
+    opts["gpu"] = "1"
+    return _array_fft(arr, opts, dtype)
+
+
+def _array_fft_cpu(arr, opts: dict[str, str], dtype: str):
+    opts = dict(opts)
+    opts["gpu"] = "0"
+    return _array_fft(arr, opts, dtype)
+
+
 def register_defaults(reg: CommandRegistry) -> None:
     reg.add_cmd("ping", _cmd_ping)
     reg.add_cmd("echo", _cmd_echo)
     reg.add_cmd("signal", _cmd_signal)
     reg.add_array("fft", _array_fft)
+    reg.add_array("fft_gpu", _array_fft_gpu)
+    reg.add_array("fft_cpu", _array_fft_cpu)
 
 
 def _load_plugins(reg: CommandRegistry) -> None:
