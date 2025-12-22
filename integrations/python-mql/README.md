@@ -32,6 +32,7 @@ Este diretório concentra o que é usado para integrar Python com MQL/MT5 no pro
 
 - `docs/PROTOCOL_ARRAY.md`
 - `docs/MQL5_RUNTIME_MODEL.md`
+- `integrations/python-mql/notes/MT5_SERVICE_START.md`
 
 ## Próximos passos
 
