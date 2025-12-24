@@ -1,0 +1,62 @@
+run
+root=/mnt/c/mql/mt5-shellscripts/Terminal
+exe=/mnt/c/mql/mt5-shellscripts/Terminal/terminal64.exe
+ini=/mnt/c/mql/mt5-shellscripts/Terminal/cmdmt_tester.ini
+start_ts=1766415882.5226955
+
+terminal log: /mnt/c/mql/mt5-shellscripts/Terminal/Logs/20251222.log
+HE	0	11:41:46.838	MQL5	2 inputs read from script 'CmdmtPreDownload' set file "C:\mql\mt5-shellscripts\Terminal\MQL5\Presets\CmdmtPreDownload.set"
+JF	0	11:41:46.842	Scripts	script CmdmtPreDownload (EURUSD,H1) loaded successfully
+LM	2	11:41:46.915	Scripts	initializing of CmdmtPreDownload (EURUSD,H1) failed with code 0
+NP	0	11:41:46.916	Scripts	script CmdmtPreDownload (EURUSD,H1) closes terminal with code 0
+LI	0	11:41:46.916	Scripts	script CmdmtPreDownload (EURUSD,H1) removed
+JM	0	11:41:48.075	Terminal	exit with code 0
+DJ	0	11:41:49.649	Terminal	stopped with 0
+IR	0	11:41:49.766	Terminal	shutdown with 0
+OS	0	11:41:50.610	Startup	successfully initialized from start config "C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini"
+DM	0	11:41:50.642	Terminal	Dukascopy MetaTrader 5 x64 build 5472 started for Dukascopy Bank SA
+FL	0	11:41:50.642	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 33 / 63 Gb memory, 2306 / 3814 Gb disk, UAC, GMT-3
+PQ	0	11:41:50.642	Terminal	C:\mql\mt5-shellscripts\Terminal
+FE	0	11:41:50.642	Terminal	launched with C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini
+LK	2	11:42:38.891	Tester	not synchronized with trade server
+JL	2	11:42:40.487	Tester	tester not started because terminal is not synchronized with the trade server [connect status 1, 100]
+LQ	2	11:42:40.487	Terminal	tester didn't start
+LL	0	11:42:41.659	Terminal	exit with code -1000012362
+DH	0	11:42:43.497	Terminal	stopped with 0
+HS	0	11:42:43.502	Terminal	shutdown with -1000012362 (tester not synchronized with trade server)
+RK	0	11:47:33.517	Startup	successfully initialized from start config "C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini"
+HE	0	11:47:33.535	Terminal	Dukascopy MetaTrader 5 x64 build 5472 started for Dukascopy Bank SA
+ED	0	11:47:33.535	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 36 / 63 Gb memory, 2306 / 3814 Gb disk, UAC, GMT-3
+DJ	0	11:47:33.535	Terminal	C:\mql\mt5-shellscripts\Terminal
+RM	0	11:47:33.535	Terminal	launched with C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini
+FM	2	11:47:35.489	Tester	no expert specified in the start config
+IJ	2	11:47:35.489	Terminal	tester didn't start
+FO	0	11:47:35.609	MQL5	2 inputs read from script 'CmdmtPreDownload' set file "C:\mql\mt5-shellscripts\Terminal\MQL5\Presets\CmdmtPreDownload.set"
+JQ	0	11:47:35.613	Scripts	script CmdmtPreDownload (EURUSD,H1) loaded successfully
+NF	2	11:47:35.713	Scripts	initializing of CmdmtPreDownload (EURUSD,H1) failed with code 0
+MJ	0	11:47:35.713	Scripts	script CmdmtPreDownload (EURUSD,H1) closes terminal with code 0
+KL	0	11:47:35.713	Scripts	script CmdmtPreDownload (EURUSD,H1) removed
+HF	0	11:47:36.733	Terminal	exit with code 0
+EL	0	11:47:38.264	Terminal	stopped with 0
+GO	0	11:47:38.368	Terminal	shutdown with 0
+LI	0	11:47:39.157	Startup	successfully initialized from start config "C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini"
+CG	0	11:47:39.189	Terminal	Dukascopy MetaTrader 5 x64 build 5472 started for Dukascopy Bank SA
+JF	0	11:47:39.189	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 36 / 63 Gb memory, 2306 / 3814 Gb disk, UAC, GMT-3
+OG	0	11:47:39.189	Terminal	C:\mql\mt5-shellscripts\Terminal
+ER	0	11:47:39.189	Terminal	launched with C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini
+QE	2	11:48:29.014	Tester	not synchronized with trade server
+IS	2	11:48:30.593	Tester	tester not started because terminal is not synchronized with the trade server [connect status 1, 100]
+KN	2	11:48:30.593	Terminal	tester didn't start
+EG	0	11:48:32.263	Terminal	exit with code -1000012362
+PM	0	11:48:33.672	Terminal	stopped with 0
+MI	0	11:48:33.683	Terminal	shutdown with -1000012362 (tester not synchronized with trade server)
+LO	0	12:04:43.858	Startup	successfully initialized from start config "C:\mql\mt5-shellscripts\Terminal\cmdmt_tester.ini"
+JN	0	12:04:43.886	Terminal	Dukascopy MetaTrader 5 x64 build 5472 started for Dukascopy Bank SA
+DO	0	12:04:43.886	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 36 / 63 Gb memory, 2307 / 3814 Gb disk, UAC, GMT-3
+NN	0	12:04:43.886	Terminal	C:\mql\mt5-shellscripts\Terminal
+QD	0	12:04:43.886	Terminal	launched with C:\mql\mt5-shellscripts\Terminal\cmdmt_tester.ini
+
+tester log: (none)
+
+data file: (none)
+

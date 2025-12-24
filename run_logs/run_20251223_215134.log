@@ -1,0 +1,52 @@
+run
+root=/mnt/c/mql/mt5-shellscripts/Terminal
+exe=/mnt/c/mql/mt5-shellscripts/Terminal/terminal64.exe
+ini=/mnt/c/mql/mt5-shellscripts/Terminal/cmdmt_tester.ini
+start_ts=1766537488.5217035
+
+terminal log: /mnt/c/mql/mt5-shellscripts/Terminal/Logs/20251223.log
+EO	0	21:51:32.730	Scripts	script CmdmtPreDownload (EURUSD,M1) closes terminal with code 1
+HN	0	21:51:32.730	Scripts	script CmdmtPreDownload (EURUSD,M1) removed
+OK	0	21:51:33.668	Terminal	exit with code 1
+ID	0	21:51:33.670	Network	'86013097': disconnected from Dukascopy-demo-mt5-1
+KG	0	21:51:33.726	Terminal	stopped with 0
+KF	0	21:51:33.841	Terminal	shutdown with 1
+
+mql5 log: /mnt/c/mql/mt5-shellscripts/Terminal/MQL5/Logs/20251223.log
+GN	0	04:47:46.577	CmdmtPreDownload (EURUSD,H1)	[CmdmtPreDownload] attempt=1 copied=144 err=0
+NK	0	04:49:40.358	CmdmtPreDownload (EURUSD,H1)	[CmdmtPreDownload] attempt=1 copied=144 err=0
+LG	0	04:52:26.741	CmdmtPreDownload (EURUSD,H1)	[CmdmtPreDownload] attempt=1 copied=144 err=0
+KS	0	05:01:05.382	CmdmtPreDownload (EURUSD,H1)	[CmdmtPreDownload] attempt=1 copied=144 err=0
+KO	0	21:37:31.977	CmdmtPreDownload (EURUSD,M1)	[CmdmtPreDownload] attempt=1 copied=10207 err=0
+JK	0	21:51:32.730	CmdmtPreDownload (EURUSD,M1)	[CmdmtPreDownload] attempt=1 copied=50000 err=0
+
+tester log: /mnt/c/mql/mt5-shellscripts/Terminal/Tester/Logs/20251223.log
+JS	0	21:47:18.794	Core 01	connected
+DK	0	21:47:18.796	Core 01	authorized (agent build 5472)
+RR	0	21:47:18.850	Core 01	connection closed
+DS	0	21:51:30.787	Tester	Local network farm switched off
+DI	0	21:51:30.787	Tester	Cloud servers switched off
+DO	2	21:51:31.461	Tester	no expert specified in the start config
+
+buffers em 20251223.log
+PS	0	04:52:32.532	Core 01	2025.12.16 00:00:00   [IndicatorStub] Buffers salvos em cmdmt_buffers.txt
+FP	0	05:01:11.875	Core 01	2025.12.16 00:00:00   [IndicatorStub] Buffers salvos em cmdmt_buffers.txt
+RI	0	21:37:38.084	Core 01	2025.12.16 00:00:00   [IndicatorStub] Buffers salvos em cmdmt_buffers.txt
+NO	0	21:42:48.146	Core 01	2025.12.16 00:00:00   [IndicatorStub] Buffers salvos em cmdmt_buffers.txt
+
+data file: /mnt/c/mql/mt5-shellscripts/Terminal/Tester/Agent-127.0.0.1-3000/MQL5/Files/cmdmt_buffers.txt
+SymbolEURUSDPeriodPERIOD_H1
+IndicatorZigZag
+--- DATA WINDOW (shift=0) ---
+buffer0value0.00000000
+buffer1value0.00000000
+buffer2value0.00000000
+buffer3value0.00000000
+buffer4value0.00000000
+--- BUFFERS (last values) ---
+buffer 0: 0.00000000 0.00000000 0.00000000 0.00000000 0.00000000
+buffer 1: 0.00000000 0.00000000 0.00000000 0.00000000 0.00000000
+buffer 2: 0.00000000 0.00000000 0.00000000 0.00000000 0.00000000
+buffer 3: 0.00000000 0.00000000 0.00000000 0.00000000 0.00000000
+buffer 4: 0.00000000 0.00000000 0.00000000 0.00000000 0.00000000
+

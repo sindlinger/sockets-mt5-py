@@ -1,0 +1,24 @@
+run
+root=/mnt/c/mql/mt5-shellscripts/Terminal
+exe=/mnt/c/mql/mt5-shellscripts/Terminal/terminal64.exe
+ini=/mnt/c/mql/mt5-shellscripts/Terminal/cmdmt_tester.ini
+start_ts=1766476647.52954
+
+terminal log: (none)
+
+tester log: (none)
+
+data file: (none)
+
+run
+root=/mnt/c/mql/mt5-shellscripts/Terminal
+exe=/mnt/c/mql/mt5-shellscripts/Terminal/terminal64.exe
+ini=/mnt/c/mql/mt5-shellscripts/Terminal/cmdmt_tester.ini
+start_ts=1766476648.2796273
+
+terminal log: (none)
+
+tester log: (none)
+
+data file: (none)
+

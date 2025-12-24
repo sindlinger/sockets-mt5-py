@@ -1,0 +1,61 @@
+run
+root=/mnt/c/mql/mt5-shellscripts/Terminal
+exe=/mnt/c/mql/mt5-shellscripts/Terminal/terminal64.exe
+ini=/mnt/c/mql/mt5-shellscripts/Terminal/cmdmt_tester.ini
+start_ts=1766543497.1565263
+
+terminal log: /mnt/c/mql/mt5-shellscripts/Terminal/Logs/20251223.log
+JI	0	23:31:40.328	Network	'86013097': terminal synchronized with Dukascopy Bank SA: 0 positions, 0 orders, 418 symbols, 0 spreads
+JH	0	23:31:40.328	Network	'86013097': trading has been enabled - hedging mode
+HE	0	23:31:40.544	Tester	automatical testing started
+KG	0	23:31:41.493	Tester	last test passed with result "successfully finished" in 0:00:00.155
+DH	0	23:31:42.644	Terminal	exit with code 0
+ES	0	23:31:42.645	Network	'86013097': disconnected from Dukascopy-demo-mt5-1
+QD	0	23:31:42.676	Terminal	stopped with 0
+CG	0	23:31:42.789	Terminal	shutdown with 0
+
+mql5 log: /mnt/c/mql/mt5-shellscripts/Terminal/MQL5/Logs/20251223.log
+RQ	0	04:43:34.730	CmdmtPreDownload (EURUSD,H1)	[CmdmtPreDownload] attempt=1 copied=48 err=0
+GN	0	04:47:46.577	CmdmtPreDownload (EURUSD,H1)	[CmdmtPreDownload] attempt=1 copied=144 err=0
+NK	0	04:49:40.358	CmdmtPreDownload (EURUSD,H1)	[CmdmtPreDownload] attempt=1 copied=144 err=0
+LG	0	04:52:26.741	CmdmtPreDownload (EURUSD,H1)	[CmdmtPreDownload] attempt=1 copied=144 err=0
+KS	0	05:01:05.382	CmdmtPreDownload (EURUSD,H1)	[CmdmtPreDownload] attempt=1 copied=144 err=0
+KO	0	21:37:31.977	CmdmtPreDownload (EURUSD,M1)	[CmdmtPreDownload] attempt=1 copied=10207 err=0
+JK	0	21:51:32.730	CmdmtPreDownload (EURUSD,M1)	[CmdmtPreDownload] attempt=1 copied=50000 err=0
+CG	0	23:31:35.909	CmdmtPreDownload (EURUSD,M1)	[CmdmtPreDownload] attempt=1 copied=50000 err=0
+
+tester log: /mnt/c/mql/mt5-shellscripts/Terminal/Tester/Logs/20251223.log
+KI	0	23:31:41.486	Core 01	2025.10.24 00:00:00   [IndicatorStub] Buffers salvos em cmdmt_buffers.txt
+EP	0	23:31:41.486	Core 01	final balance 10000.00 USD
+NK	0	23:31:41.486	Core 01	EURUSD,H1: 1857947 ticks, 1008 bars generated. Environment synchronized in 0:00:00.017. Test passed in 0:00:00.155 (including ticks preprocessing 0:00:00.031).
+QL	0	23:31:41.486	Core 01	EURUSD,H1: total time from login to stop testing 0:00:00.172 (including 0:00:00.017 for history data synchronization)
+KN	0	23:31:41.486	Core 01	83 Mb memory used including 0.94 Mb of history data, 64 Mb of tick data
+EN	0	23:31:41.486	Core 01	log file "C:\mql\mt5-shellscripts\Terminal\Tester\Agent-127.0.0.1-3000\logs\20251223.log" written
+EQ	0	23:31:41.493	Tester	automatical testing finished
+JH	0	23:31:41.493	Core 01	connection closed
+
+erros:
+QD	0	23:31:37.153	Terminal	shutdown with 1
+
+buffers em 20251223.log
+NP	0	22:50:21.902	Core 01	2025.10.24 00:00:00   [IndicatorStub] Buffers salvos em cmdmt_buffers.txt
+HI	0	23:02:30.175	Core 01	2025.10.24 00:00:00   [IndicatorStub] Buffers salvos em cmdmt_buffers.txt
+OP	0	23:30:30.845	Core 01	2025.10.24 00:00:00   [IndicatorStub] Buffers salvos em cmdmt_buffers.txt
+KI	0	23:31:41.486	Core 01	2025.10.24 00:00:00   [IndicatorStub] Buffers salvos em cmdmt_buffers.txt
+
+data file: /mnt/c/mql/mt5-shellscripts/Terminal/Tester/Agent-127.0.0.1-3000/MQL5/Files/cmdmt_buffers.txt
+SymbolEURUSDPeriodPERIOD_H1
+IndicatorZigZag
+--- DATA WINDOW (shift=0) ---
+buffer0value0.00000000
+buffer1value0.00000000
+buffer2value0.00000000
+buffer3value0.00000000
+buffer4value0.00000000
+--- BUFFERS (last values) ---
+buffer 0: 0.00000000 0.00000000 1.16200000 0.00000000 0.00000000
+buffer 1: 0.00000000 0.00000000 0.00000000 0.00000000 0.00000000
+buffer 2: 0.00000000 0.00000000 0.00000000 0.00000000 0.00000000
+buffer 3: 0.00000000 0.00000000 1.16200000 0.00000000 0.00000000
+buffer 4: 0.00000000 0.00000000 0.00000000 0.00000000 0.00000000
+

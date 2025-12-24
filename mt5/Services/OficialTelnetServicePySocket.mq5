@@ -1,6 +1,7 @@
 //+------------------------------------------------------------------+
 //| OficialTelnetServicePySocket.mq5                                 |
-//| Serviço TCP: Python-only (PY_CALL / PY_ARRAY_CALL)               |
+//| PyInService (pyin): serviço TCP exclusivo para Python            |
+//| Comandos: PY_CALL / PY_ARRAY_CALL                                |
 //| Texto:  id|TYPE|p1|p2\n                                          |
 //| Frame binário (SEND_ARRAY/GET_ARRAY):                            |
 //|   0xFF + 4 bytes (len header, big-endian) + header UTF-8         |
@@ -22,11 +23,11 @@ input bool   InpVerboseLogs = true; // logs ligados por padrão
 
 #include "OficialTelnetServiceSocket/SocketBridge.mqh"
 
-string LISTENER_VERSION_SOCKET = "svc-py-socket-1.0.0";
+string LISTENER_VERSION_SOCKET = "pyin-service-1.0.0";
 
 void Log(const string txt)
 {
-  if(InpVerboseLogs) Print("[SvcPy] ", txt);
+  if(InpVerboseLogs) Print("[PyIn] ", txt);
 }
 
 uint g_listen = 0;
@@ -202,7 +203,7 @@ bool ShouldLogCheck(const string type)
   return true;
 }
 
-// ---- Python bridge frame helpers (0xFF + len + header + payload) ----
+// ---- PyOutService frame helpers (0xFF + len + header + payload) ----
 bool PySendFrame(uint sock, const string header, uchar &payload[])
 {
   uchar hb[]; StringToCharArray(header, hb, 0, StringLen(header), CP_UTF8);

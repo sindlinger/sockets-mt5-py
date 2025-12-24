@@ -1,0 +1,337 @@
+run
+root=/mnt/c/mql/mt5-shellscripts/Terminal
+exe=/mnt/c/mql/mt5-shellscripts/Terminal/terminal64.exe
+ini=/mnt/c/mql/mt5-shellscripts/sockets-python/cmdmt_tester.ini
+start_ts=1766316306.6895952
+
+terminal log: /mnt/c/mql/mt5-shellscripts/Terminal/Logs/20251221.log
+PO	0	07:41:23.431	Terminal	updating C:\mql\mt5-shellscripts\Terminal\MQL5 folder
+LJ	0	07:41:23.580	Terminal	453 files updated
+IL	0	07:41:23.675	Startup	successfully initialized from start config "C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini"
+CR	0	07:41:23.967	Terminal	Dukascopy MetaTrader 5 x64 build 5472 started for Dukascopy Bank SA
+GK	0	07:41:23.967	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 32 / 63 Gb memory, 2310 / 3814 Gb disk, UAC, GMT-3
+OJ	0	07:41:23.967	Terminal	C:\mql\mt5-shellscripts\Terminal
+QN	0	07:41:23.967	Terminal	launched with C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini
+PN	0	07:41:23.994	Compiler	full recompilation has been started
+MG	2	07:41:26.381	Tester	tester not started because the account is not specified
+CL	2	07:41:26.381	Terminal	tester didn't start
+OI	0	07:41:27.410	Terminal	exit with code -1000012353
+EO	0	07:41:28.589	Terminal	stopped with 0
+JS	0	07:41:28.698	Terminal	shutdown with -1000012353 (tester not started because the account is not specified)
+EP	0	07:42:58.188	Startup	successfully initialized from start config "C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini"
+MN	0	07:42:58.210	Terminal	Dukascopy MetaTrader 5 x64 build 5472 started for Dukascopy Bank SA
+RO	0	07:42:58.211	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 32 / 63 Gb memory, 2310 / 3814 Gb disk, UAC, GMT-3
+RO	0	07:42:58.211	Terminal	C:\mql\mt5-shellscripts\Terminal
+DJ	0	07:42:58.211	Terminal	launched with C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini
+PR	0	07:42:58.212	Compiler	full recompilation has been started
+JK	2	07:43:01.208	Tester	tester not started because the account is not specified
+PI	2	07:43:01.208	Terminal	tester didn't start
+QD	0	07:43:02.796	Terminal	exit with code -1000012353
+EP	0	07:43:02.855	Terminal	stopped with 0
+NF	0	07:43:02.957	Terminal	shutdown with -1000012353 (tester not started because the account is not specified)
+QE	0	07:45:54.826	Startup	successfully initialized from start config "C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini"
+GK	0	07:45:54.840	Terminal	Dukascopy MetaTrader 5 x64 build 5472 started for Dukascopy Bank SA
+CR	0	07:45:54.840	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 32 / 63 Gb memory, 2310 / 3814 Gb disk, UAC, GMT-3
+CS	0	07:45:54.840	Terminal	C:\mql\mt5-shellscripts\Terminal
+MG	0	07:45:54.840	Terminal	launched with C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini
+OG	0	07:45:54.841	Compiler	full recompilation has been started
+PN	2	07:45:56.828	Tester	tester not started because the account is not specified
+RE	2	07:45:56.828	Terminal	tester didn't start
+DP	0	07:45:57.953	Terminal	exit with code -1000012353
+HD	0	07:45:58.048	Terminal	stopped with 0
+OM	0	07:45:58.164	Terminal	shutdown with -1000012353 (tester not started because the account is not specified)
+HJ	0	07:47:57.044	Startup	successfully initialized from start config "C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini"
+ED	0	07:47:57.058	Terminal	Dukascopy MetaTrader 5 x64 build 5472 started for Dukascopy Bank SA
+QE	0	07:47:57.058	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 32 / 63 Gb memory, 2309 / 3814 Gb disk, UAC, GMT-3
+QH	0	07:47:57.058	Terminal	C:\mql\mt5-shellscripts\Terminal
+CS	0	07:47:57.058	Terminal	launched with C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini
+JL	0	07:47:57.058	Compiler	full recompilation has been started
+CE	2	07:47:58.900	Tester	tester not started because the account is not specified
+ER	2	07:47:58.900	Terminal	tester didn't start
+FK	0	07:48:00.495	Terminal	exit with code -1000012353
+MI	0	07:48:00.580	Terminal	stopped with 0
+OQ	0	07:48:00.696	Terminal	shutdown with -1000012353 (tester not started because the account is not specified)
+IN	0	08:09:18.531	Startup	successfully initialized from start config "C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini"
+RP	0	08:09:18.545	Terminal	Dukascopy MetaTrader 5 x64 build 5472 started for Dukascopy Bank SA
+HI	0	08:09:18.545	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 34 / 63 Gb memory, 2309 / 3814 Gb disk, UAC, GMT-3
+FL	0	08:09:18.545	Terminal	C:\mql\mt5-shellscripts\Terminal
+DH	0	08:09:18.545	Terminal	launched with C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini
+QP	0	08:09:18.545	Compiler	full recompilation has been started
+IH	0	08:09:18.664	HistoryCenter	delete old files from C:\mql\mt5-shellscripts\Terminal\bases\Dukascopy-demo-mt5-1\history\EURUSD, last access time 2023.06.08 10:59
+ML	0	08:09:18.674	HistoryCenter	delete old files from C:\mql\mt5-shellscripts\Terminal\bases\Dukascopy-demo-mt5-1\history\GBPUSD, last access time 2023.06.08 10:59
+PR	0	08:09:18.682	HistoryCenter	delete old files from C:\mql\mt5-shellscripts\Terminal\bases\Dukascopy-demo-mt5-1\history\USDCHF, last access time 2023.06.08 10:59
+MF	0	08:09:18.690	HistoryCenter	delete old files from C:\mql\mt5-shellscripts\Terminal\bases\Dukascopy-demo-mt5-1\history\USDJPY, last access time 2023.06.08 10:59
+OG	2	08:09:31.820	Network	'86013097': no connection to Dukascopy-demo-mt5-1
+NE	0	08:09:45.505	Compiler	full recompilation has been finished:  113 file(s) compiled
+PS	0	08:10:03.053	Network	'86013097': authorized on Dukascopy-demo-mt5-1 through Access Point 5
+HO	0	08:10:05.992	Network	'86013097': terminal synchronized with Dukascopy Bank SA: 0 positions, 0 orders, 418 symbols, 0 spreads
+LN	0	08:10:05.992	Network	'86013097': trading has been enabled - hedging mode
+MG	0	08:10:06.312	Tester	automatical testing started
+MR	0	08:10:06.537	AutoTesting	EURUSD: preliminary downloading of M1 history started
+EF	0	08:10:07.585	Network	'86013097': scanning network for access points
+LN	0	08:10:09.347	AutoTesting	EURUSD: 23% history downloaded
+GF	0	08:10:10.654	AutoTesting	EURUSD: 34% history downloaded
+DN	0	08:10:11.194	AutoTesting	EURUSD: 40% history downloaded
+EF	0	08:10:12.391	AutoTesting	EURUSD: 52% history downloaded
+PQ	0	08:10:13.369	AutoTesting	EURUSD: 64% history downloaded
+LI	0	08:10:14.568	AutoTesting	EURUSD: 75% history downloaded
+NQ	0	08:10:16.963	AutoTesting	EURUSD: 81% history downloaded
+RI	0	08:10:19.670	AutoTesting	EURUSD: 92% history downloaded
+PS	0	08:10:21.508	AutoTesting	EURUSD: preliminary downloading of M1 history completed in 0:00:15.203
+GD	0	08:10:22.334	Tester	last test passed with result "some error after pass finished" in 0:00:00.000
+KF	0	08:10:23.242	Terminal	exit with code 0
+JQ	0	08:10:23.243	Network	'86013097': disconnected from Dukascopy-demo-mt5-1
+GE	0	08:10:23.280	Terminal	stopped with 0
+QQ	0	08:10:23.281	Terminal	shutdown with 0
+NR	0	08:22:09.995	Startup	successfully initialized from start config "C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini"
+IL	0	08:22:10.082	Terminal	Dukascopy MetaTrader 5 x64 build 5472 started for Dukascopy Bank SA
+PM	0	08:22:10.083	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 34 / 63 Gb memory, 2309 / 3814 Gb disk, UAC, GMT-3
+FQ	0	08:22:10.083	Terminal	C:\mql\mt5-shellscripts\Terminal
+PD	0	08:22:10.083	Terminal	launched with C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini
+EE	0	08:22:12.669	Network	'86013097': authorized on Dukascopy-demo-mt5-1 through mt5-demoas-1
+CQ	0	08:22:12.669	Network	'86013097': previous successful authorization performed from 177.37.141.253 on 2025.12.21 13:10:03
+FS	0	08:22:12.946	Network	'86013097': terminal synchronized with Dukascopy Bank SA: 0 positions, 0 orders, 418 symbols, 0 spreads
+RR	0	08:22:12.946	Network	'86013097': trading has been enabled - hedging mode
+DK	0	08:22:13.170	Tester	automatical testing started
+EN	0	08:22:13.993	Tester	last test passed with result "some error after pass finished" in 0:00:00.000
+IP	0	08:22:14.908	Terminal	exit with code 0
+HK	0	08:22:14.909	Network	'86013097': disconnected from Dukascopy-demo-mt5-1
+CO	0	08:22:14.933	Terminal	stopped with 0
+FO	0	08:22:15.040	Terminal	shutdown with 0
+CH	0	08:23:59.639	Startup	successfully initialized from start config "C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini"
+CF	0	08:23:59.655	Terminal	Dukascopy MetaTrader 5 x64 build 5472 started for Dukascopy Bank SA
+MG	0	08:23:59.655	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 34 / 63 Gb memory, 2309 / 3814 Gb disk, UAC, GMT-3
+OF	0	08:23:59.655	Terminal	C:\mql\mt5-shellscripts\Terminal
+QR	0	08:23:59.655	Terminal	launched with C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini
+QK	0	08:24:01.751	Network	'86013097': authorized on Dukascopy-demo-mt5-1 through mt5-demoas-1
+LG	0	08:24:01.751	Network	'86013097': previous successful authorization performed from 177.37.141.253 on 2025.12.21 13:22:12
+LE	0	08:24:02.019	Network	'86013097': terminal synchronized with Dukascopy Bank SA: 0 positions, 0 orders, 418 symbols, 0 spreads
+LD	0	08:24:02.019	Network	'86013097': trading has been enabled - hedging mode
+LQ	0	08:24:02.248	Tester	automatical testing started
+RH	0	08:24:03.070	Tester	last test passed with result "some error after pass finished" in 0:00:00.000
+CJ	0	08:24:04.130	Terminal	exit with code 0
+RF	0	08:24:04.131	Network	'86013097': disconnected from Dukascopy-demo-mt5-1
+LQ	0	08:24:04.155	Terminal	stopped with 0
+JE	0	08:24:04.260	Terminal	shutdown with 0
+IN	0	08:25:07.137	Startup	successfully initialized from start config "C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini"
+QP	0	08:25:07.153	Terminal	Dukascopy MetaTrader 5 x64 build 5472 started for Dukascopy Bank SA
+FI	0	08:25:07.153	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 33 / 63 Gb memory, 2309 / 3814 Gb disk, UAC, GMT-3
+EL	0	08:25:07.153	Terminal	C:\mql\mt5-shellscripts\Terminal
+OH	0	08:25:07.153	Terminal	launched with C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini
+DQ	0	08:25:09.726	Network	'86013097': authorized on Dukascopy-demo-mt5-1 through mt5-demoas-1
+IM	0	08:25:09.726	Network	'86013097': previous successful authorization performed from 177.37.141.253 on 2025.12.21 13:24:01
+CO	0	08:25:10.001	Network	'86013097': terminal synchronized with Dukascopy Bank SA: 0 positions, 0 orders, 418 symbols, 0 spreads
+GN	0	08:25:10.001	Network	'86013097': trading has been enabled - hedging mode
+GG	0	08:25:10.245	Tester	automatical testing started
+GR	0	08:25:11.059	Tester	last test passed with result "some error after pass finished" in 0:00:00.000
+QD	0	08:25:11.971	Terminal	exit with code 0
+IP	0	08:25:11.973	Network	'86013097': disconnected from Dukascopy-demo-mt5-1
+KK	0	08:25:11.997	Terminal	stopped with 0
+PR	0	08:25:12.107	Terminal	shutdown with 0
+
+tester log: /mnt/c/mql/mt5-shellscripts/Terminal/Tester/Logs/20251221.log
+PK	0	08:10:16.963	Tester	EURUSD: 81% history downloaded
+RL	0	08:10:19.670	Tester	EURUSD: 92% history downloaded
+JF	0	08:10:21.508	Tester	EURUSD: preliminary downloading of M1 history completed in 0:00:15.203
+RR	0	08:10:21.508	Tester	EURUSD: history data begins from 2023.11.30 00:00
+JL	0	08:10:21.508	Tester	EURUSD: history data begins from 2023.11.30 00:00
+FG	0	08:10:21.569	Core 01	agent process started on 127.0.0.1:3000
+QS	0	08:10:21.569	Core 01	connecting to 127.0.0.1:3000
+RF	0	08:10:22.099	Core 01	connected
+GG	0	08:10:22.102	Core 01	authorized (agent build 5472)
+GO	0	08:10:22.115	Tester	EURUSD,H1 (Dukascopy-demo-mt5-1): testing of Experts\IndicatorStub.ex5 from 2025.12.18 00:00 to 2025.12.21 00:00
+FO	0	08:10:22.120	Core 01	common synchronization completed
+HE	0	08:10:22.180	Core 01	EURUSD: history for 2024 year synchronized
+QN	0	08:10:22.263	Core 01	EURUSD: history for 2025 year synchronized
+OK	0	08:10:22.263	Core 01	EURUSD: history synchronization completed [3310 Kb]
+EI	0	08:10:22.263	Core 01	EURUSD: 3.23 Mb of history processed in 0:00:00.141
+PR	0	08:10:22.329	Tester	quality of analyzed history is 100%
+QH	2	08:10:22.331	Tester	expert file C:\mql\mt5-shellscripts\Terminal\MQL5\PyFft.ex5 open error [2]
+IS	2	08:10:22.331	Tester	expert file C:\mql\mt5-shellscripts\Terminal\MQL5\Indicators\PyFft.ex5 open error [2]
+HP	0	08:10:22.332	Core 01	MetaTester 5 started on 127.0.0.1:3000
+FJ	0	08:10:22.332	Core 01	cloud network mode is off
+EN	0	08:10:22.332	Core 01	initialization finished
+MK	0	08:10:22.332	Core 01	login (build 5472)
+KS	0	08:10:22.332	Core 01	492980 bytes of account info loaded
+ID	0	08:10:22.332	Core 01	1478 bytes of tester parameters loaded
+IS	0	08:10:22.332	Core 01	1220 bytes of input parameters loaded
+MF	0	08:10:22.332	Core 01	2597 bytes of symbols list loaded (418 symbols)
+HM	0	08:10:22.332	Core 01	expert file added: Experts\IndicatorStub.ex5. 6605 bytes loaded
+CD	0	08:10:22.332	Core 01	35338 Mb available, 441 blocks set for ticks generating
+IQ	0	08:10:22.332	Core 01	initial deposit 10000.00 USD, leverage 1:100
+PL	0	08:10:22.332	Core 01	successfully initialized
+OS	0	08:10:22.332	Core 01	23 Kb of total initialization data received
+HN	0	08:10:22.332	Core 01	12th Gen Intel Core i9-12900KF, 65348 MB
+GJ	0	08:10:22.332	Core 01	EURUSD: symbol to be synchronized
+RN	0	08:10:22.332	Core 01	EURUSD: symbol synchronized, 3720 bytes of symbol info received
+II	0	08:10:22.332	Core 01	EURUSD: load 3.23 Mb of history data to synchronize in 0:00:00.176
+OR	0	08:10:22.332	Core 01	EURUSD: history synchronized from 2024.01.02 to 2025.12.19
+GR	0	08:10:22.332	Core 01	EURUSD,H1: history cache allocated for 12302 bars and contains 12250 bars from 2024.01.02 00:00 to 2025.12.17 23:00
+IM	0	08:10:22.332	Core 01	EURUSD,H1: history begins from 2024.01.02 00:00
+KJ	0	08:10:22.332	Core 01	EURUSD,H1 (Dukascopy-demo-mt5-1): every tick generating
+GQ	0	08:10:22.332	Core 01	testing with execution delay 1 milliseconds
+JS	0	08:10:22.332	Core 01	EURUSD,H1: testing of Experts\IndicatorStub.ex5 from 2025.12.18 00:00 to 2025.12.21 00:00 started with inputs:
+MP	0	08:10:22.332	Core 01	  IndicatorPath=PyFft
+GD	0	08:10:22.332	Core 01	  IndicatorParams=
+LK	2	08:10:22.332	Core 01	program file PyFft.ex5 read error
+DM	2	08:10:22.332	Core 01	program file Indicators\PyFft.ex5 read error
+LK	2	08:10:22.332	Core 01	loading of PyFft EURUSD,H1 failed [557]
+PM	2	08:10:22.332	Core 01	2025.12.18 00:00:00   cannot load custom indicator 'PyFft' [4802]
+EL	2	08:10:22.332	Core 01	2025.12.18 00:00:00   indicator create error in 'IndicatorStub.mq5' (1,1)
+QI	2	08:10:22.332	Core 01	OnInit critical error
+IL	2	08:10:22.332	Core 01	tester stopped because OnInit failed
+NG	0	08:10:22.334	Tester	automatical testing finished
+CL	2	08:10:22.335	Core 01	disconnected
+JK	0	08:10:22.335	Core 01	connection closed
+JH	0	08:22:11.323	Tester	Local network farm switched off
+JR	0	08:22:11.323	Tester	Cloud servers switched off
+EG	0	08:22:12.998	Tester	"IndicatorStub.ex5" X64
+MN	0	08:22:13.393	Tester	EURUSD: history data begins from 2023.07.27 00:00
+EH	0	08:22:13.393	Tester	EURUSD: history data begins from 2023.07.27 00:00
+HS	0	08:22:13.396	Core 01	agent process started on 127.0.0.1:3000
+KG	0	08:22:13.396	Core 01	connecting to 127.0.0.1:3000
+FR	0	08:22:13.935	Core 01	connected
+IK	0	08:22:13.938	Core 01	authorized (agent build 5472)
+QS	0	08:22:13.949	Tester	EURUSD,H1 (Dukascopy-demo-mt5-1): testing of Experts\IndicatorStub.ex5 from 2025.11.01 00:00 to 2025.11.30 00:00
+MS	0	08:22:13.955	Core 01	common synchronization completed
+OH	0	08:22:13.987	Tester	quality of analyzed history is 100%
+CN	2	08:22:13.989	Tester	expert file C:\mql\mt5-shellscripts\Terminal\MQL5\Indicators\ATR_FFT_PhaseClock_OLA_Causal-chart-clock.ex5 open error [1920]
+ES	2	08:22:13.989	Tester	expert file C:\mql\mt5-shellscripts\Terminal\MQL5\Indicators\ATR_FFT_PhaseClock_OLA_Causal-chart-clock.ex5 open error [1920]
+ER	0	08:22:13.989	Core 01	MetaTester 5 started on 127.0.0.1:3000
+OH	0	08:22:13.989	Core 01	cloud network mode is off
+LL	0	08:22:13.989	Core 01	initialization finished
+HE	0	08:22:13.989	Core 01	login (build 5472)
+RQ	0	08:22:13.989	Core 01	492980 bytes of account info loaded
+PF	0	08:22:13.989	Core 01	1478 bytes of tester parameters loaded
+PQ	0	08:22:13.989	Core 01	1220 bytes of input parameters loaded
+HD	0	08:22:13.989	Core 01	2597 bytes of symbols list loaded (418 symbols)
+QS	0	08:22:13.989	Core 01	expert file added: Experts\IndicatorStub.ex5. 6605 bytes loaded
+IF	0	08:22:13.989	Core 01	34932 Mb available, 436 blocks set for ticks generating
+PG	0	08:22:13.989	Core 01	initial deposit 10000.00 USD, leverage 1:100
+IN	0	08:22:13.989	Core 01	successfully initialized
+JE	0	08:22:13.989	Core 01	23 Kb of total initialization data received
+ML	0	08:22:13.989	Core 01	12th Gen Intel Core i9-12900KF, 65348 MB
+NH	0	08:22:13.989	Core 01	EURUSD: symbol to be synchronized
+GL	0	08:22:13.989	Core 01	EURUSD: symbol synchronized, 3720 bytes of symbol info received
+IK	0	08:22:13.989	Core 01	EURUSD: load 27 bytes of history data to synchronize in 0:00:00.000
+HD	0	08:22:13.989	Core 01	EURUSD: history synchronized from 2024.01.02 to 2025.12.19
+PL	0	08:22:13.989	Core 01	EURUSD,H1: history cache allocated for 11955 bars and contains 11458 bars from 2024.01.02 00:00 to 2025.10.31 23:00
+RO	0	08:22:13.989	Core 01	EURUSD,H1: history begins from 2024.01.02 00:00
+DH	0	08:22:13.989	Core 01	EURUSD,H1 (Dukascopy-demo-mt5-1): every tick generating
+PG	0	08:22:13.989	Core 01	testing with execution delay 1 milliseconds
+IQ	0	08:22:13.989	Core 01	EURUSD,H1: testing of Experts\IndicatorStub.ex5 from 2025.11.01 00:00 to 2025.11.30 00:00 started with inputs:
+HN	0	08:22:13.989	Core 01	  IndicatorPath=ATR_FFT_PhaseClock_OLA_Causal-chart-clock
+HJ	0	08:22:13.989	Core 01	  IndicatorParams=
+QR	2	08:22:13.989	Core 01	program file ATR_FFT_PhaseClock_OLA_Causal-chart-clock.ex5 read error
+QP	2	08:22:13.989	Core 01	program file Indicators\ATR_FFT_PhaseClock_OLA_Causal-chart-clock.ex5 read error
+QK	2	08:22:13.989	Core 01	loading of ATR_FFT_PhaseClock_OLA_Causal-chart-clock EURUSD,H1 failed [557]
+LI	2	08:22:13.989	Core 01	2025.11.01 00:00:00   cannot load custom indicator 'ATR_FFT_PhaseClock_OLA_Causal-chart-clock' [4802]
+KE	2	08:22:13.989	Core 01	2025.11.01 00:00:00   indicator create error in 'IndicatorStub.mq5' (1,1)
+RQ	2	08:22:13.989	Core 01	OnInit critical error
+JD	2	08:22:13.989	Core 01	tester stopped because OnInit failed
+CO	0	08:22:13.994	Tester	automatical testing finished
+MD	2	08:22:13.994	Core 01	disconnected
+PS	0	08:22:13.994	Core 01	connection closed
+IQ	0	08:24:00.739	Tester	Local network farm switched off
+IJ	0	08:24:00.739	Tester	Cloud servers switched off
+GN	0	08:24:02.076	Tester	"IndicatorStub.ex5" X64
+OG	0	08:24:02.472	Tester	EURUSD: history data begins from 2023.07.27 00:00
+GP	0	08:24:02.472	Tester	EURUSD: history data begins from 2023.07.27 00:00
+EH	0	08:24:02.476	Core 01	agent process started on 127.0.0.1:3000
+RO	0	08:24:02.476	Core 01	connecting to 127.0.0.1:3000
+CJ	0	08:24:03.012	Core 01	connected
+RP	0	08:24:03.015	Core 01	authorized (agent build 5472)
+CK	0	08:24:03.027	Tester	EURUSD,H1 (Dukascopy-demo-mt5-1): testing of Experts\IndicatorStub.ex5 from 2025.11.01 00:00 to 2025.11.30 00:00
+OK	0	08:24:03.033	Core 01	common synchronization completed
+JS	0	08:24:03.064	Tester	quality of analyzed history is 100%
+JE	2	08:24:03.066	Tester	expert file C:\mql\mt5-shellscripts\Terminal\MQL5\Indicators\ATR_FFT_PhaseClock_OLA_Causal-chart-clock.ex5 open error [1920]
+HJ	2	08:24:03.066	Tester	expert file C:\mql\mt5-shellscripts\Terminal\MQL5\Indicators\ATR_FFT_PhaseClock_OLA_Causal-chart-clock.ex5 open error [1920]
+HJ	0	08:24:03.066	Core 01	MetaTester 5 started on 127.0.0.1:3000
+NG	0	08:24:03.066	Core 01	cloud network mode is off
+QD	0	08:24:03.066	Core 01	initialization finished
+EL	0	08:24:03.066	Core 01	login (build 5472)
+KI	0	08:24:03.066	Core 01	492980 bytes of account info loaded
+MN	0	08:24:03.066	Core 01	1478 bytes of tester parameters loaded
+MH	0	08:24:03.066	Core 01	1220 bytes of input parameters loaded
+EM	0	08:24:03.066	Core 01	2597 bytes of symbols list loaded (418 symbols)
+LK	0	08:24:03.066	Core 01	expert file added: Experts\IndicatorStub.ex5. 6605 bytes loaded
+JN	0	08:24:03.066	Core 01	34943 Mb available, 436 blocks set for ticks generating
+ML	0	08:24:03.066	Core 01	initial deposit 10000.00 USD, leverage 1:100
+DG	0	08:24:03.066	Core 01	successfully initialized
+CM	0	08:24:03.066	Core 01	23 Kb of total initialization data received
+PD	0	08:24:03.066	Core 01	12th Gen Intel Core i9-12900KF, 65348 MB
+OQ	0	08:24:03.066	Core 01	EURUSD: symbol to be synchronized
+FD	0	08:24:03.066	Core 01	EURUSD: symbol synchronized, 3720 bytes of symbol info received
+DP	0	08:24:03.066	Core 01	EURUSD: load 27 bytes of history data to synchronize in 0:00:00.000
+EO	0	08:24:03.066	Core 01	EURUSD: history synchronized from 2024.01.02 to 2025.12.19
+MD	0	08:24:03.066	Core 01	EURUSD,H1: history cache allocated for 11955 bars and contains 11458 bars from 2024.01.02 00:00 to 2025.10.31 23:00
+KG	0	08:24:03.066	Core 01	EURUSD,H1: history begins from 2024.01.02 00:00
+IG	0	08:24:03.066	Core 01	EURUSD,H1 (Dukascopy-demo-mt5-1): every tick generating
+ML	0	08:24:03.066	Core 01	testing with execution delay 1 milliseconds
+DH	0	08:24:03.066	Core 01	EURUSD,H1: testing of Experts\IndicatorStub.ex5 from 2025.11.01 00:00 to 2025.11.30 00:00 started with inputs:
+EF	0	08:24:03.066	Core 01	  IndicatorPath=ATR_FFT_PhaseClock_OLA_Causal-chart-clock
+ES	0	08:24:03.066	Core 01	  IndicatorParams=
+LJ	2	08:24:03.066	Core 01	program file ATR_FFT_PhaseClock_OLA_Causal-chart-clock.ex5 read error
+LI	2	08:24:03.066	Core 01	program file Indicators\ATR_FFT_PhaseClock_OLA_Causal-chart-clock.ex5 read error
+LS	2	08:24:03.066	Core 01	loading of ATR_FFT_PhaseClock_OLA_Causal-chart-clock EURUSD,H1 failed [557]
+QP	2	08:24:03.066	Core 01	2025.11.01 00:00:00   cannot load custom indicator 'ATR_FFT_PhaseClock_OLA_Causal-chart-clock' [4802]
+RM	2	08:24:03.066	Core 01	2025.11.01 00:00:00   indicator create error in 'IndicatorStub.mq5' (1,1)
+KN	2	08:24:03.066	Core 01	OnInit critical error
+CO	2	08:24:03.066	Core 01	tester stopped because OnInit failed
+OD	0	08:24:03.070	Tester	automatical testing finished
+IM	2	08:24:03.070	Core 01	disconnected
+DH	0	08:24:03.070	Core 01	connection closed
+DI	0	08:25:08.281	Tester	Local network farm switched off
+DS	0	08:25:08.281	Tester	Cloud servers switched off
+NF	0	08:25:10.051	Tester	"IndicatorStub.ex5" X64
+RO	0	08:25:10.459	Tester	EURUSD: history data begins from 2023.07.27 00:00
+RI	0	08:25:10.462	Tester	EURUSD: history data begins from 2023.07.27 00:00
+MP	0	08:25:10.465	Core 01	agent process started on 127.0.0.1:3000
+JF	0	08:25:10.465	Core 01	connecting to 127.0.0.1:3000
+MQ	0	08:25:11.003	Core 01	connected
+JH	0	08:25:11.006	Core 01	authorized (agent build 5472)
+IP	0	08:25:11.018	Tester	EURUSD,H1 (Dukascopy-demo-mt5-1): testing of Experts\IndicatorStub.ex5 from 2025.11.01 00:00 to 2025.11.30 00:00
+JR	0	08:25:11.023	Core 01	common synchronization completed
+QK	0	08:25:11.054	Tester	quality of analyzed history is 100%
+HL	2	08:25:11.056	Tester	expert file C:\mql\mt5-shellscripts\Terminal\MQL5\fft-PLL-Sinewave\ATR_FFT_PhaseClock_OLA_Causal-chart-clock.ex5 open error [3]
+JN	2	08:25:11.057	Tester	expert file C:\mql\mt5-shellscripts\Terminal\MQL5\Indicators\fft-PLL-Sinewave\ATR_FFT_PhaseClock_OLA_Causal-chart-clock.ex5 open error [1920]
+HG	0	08:25:11.057	Core 01	MetaTester 5 started on 127.0.0.1:3000
+NL	0	08:25:11.057	Core 01	cloud network mode is off
+QK	0	08:25:11.057	Core 01	initialization finished
+EQ	0	08:25:11.057	Core 01	login (build 5472)
+KN	0	08:25:11.057	Core 01	492980 bytes of account info loaded
+MI	0	08:25:11.057	Core 01	1478 bytes of tester parameters loaded
+MM	0	08:25:11.057	Core 01	1220 bytes of input parameters loaded
+EH	0	08:25:11.057	Core 01	2597 bytes of symbols list loaded (418 symbols)
+LP	0	08:25:11.057	Core 01	expert file added: Experts\IndicatorStub.ex5. 6605 bytes loaded
+HS	0	08:25:11.057	Core 01	34834 Mb available, 435 blocks set for ticks generating
+MK	0	08:25:11.057	Core 01	initial deposit 10000.00 USD, leverage 1:100
+DR	0	08:25:11.057	Core 01	successfully initialized
+CH	0	08:25:11.057	Core 01	23 Kb of total initialization data received
+PS	0	08:25:11.057	Core 01	12th Gen Intel Core i9-12900KF, 65348 MB
+OD	0	08:25:11.057	Core 01	EURUSD: symbol to be synchronized
+FS	0	08:25:11.057	Core 01	EURUSD: symbol synchronized, 3720 bytes of symbol info received
+DO	0	08:25:11.057	Core 01	EURUSD: load 27 bytes of history data to synchronize in 0:00:00.000
+EH	0	08:25:11.057	Core 01	EURUSD: history synchronized from 2024.01.02 to 2025.12.19
+MO	0	08:25:11.057	Core 01	EURUSD,H1: history cache allocated for 11955 bars and contains 11458 bars from 2024.01.02 00:00 to 2025.10.31 23:00
+KH	0	08:25:11.057	Core 01	EURUSD,H1: history begins from 2024.01.02 00:00
+IL	0	08:25:11.057	Core 01	EURUSD,H1 (Dukascopy-demo-mt5-1): every tick generating
+MK	0	08:25:11.057	Core 01	testing with execution delay 1 milliseconds
+DM	0	08:25:11.057	Core 01	EURUSD,H1: testing of Experts\IndicatorStub.ex5 from 2025.11.01 00:00 to 2025.11.30 00:00 started with inputs:
+QQ	0	08:25:11.057	Core 01	  IndicatorPath=fft-PLL-Sinewave\ATR_FFT_PhaseClock_OLA_Causal-chart-clock
+GP	0	08:25:11.057	Core 01	  IndicatorParams=
+NH	2	08:25:11.057	Core 01	program file fft-PLL-Sinewave\ATR_FFT_PhaseClock_OLA_Causal-chart-clock.ex5 read error
+DD	2	08:25:11.057	Core 01	program file Indicators\fft-PLL-Sinewave\ATR_FFT_PhaseClock_OLA_Causal-chart-clock.ex5 read error
+RR	2	08:25:11.057	Core 01	loading of ATR_FFT_PhaseClock_OLA_Causal-chart-clock EURUSD,H1 failed [557]
+KS	2	08:25:11.057	Core 01	2025.11.01 00:00:00   cannot load custom indicator 'fft-PLL-Sinewave\ATR_FFT_PhaseClock_OLA_Causal-chart-clock' [4802]
+JQ	2	08:25:11.057	Core 01	2025.11.01 00:00:00   indicator create error in 'IndicatorStub.mq5' (1,1)
+CM	2	08:25:11.057	Core 01	OnInit critical error
+KH	2	08:25:11.057	Core 01	tester stopped because OnInit failed
+PS	0	08:25:11.059	Tester	automatical testing finished
+JH	2	08:25:11.059	Core 01	disconnected
+MG	0	08:25:11.060	Core 01	connection closed
+
+data file: (none)
+
+screenshot: (none)
+

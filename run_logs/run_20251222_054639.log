@@ -1,0 +1,25 @@
+run
+root=/mnt/c/mql/mt5-shellscripts/Terminal
+exe=/mnt/c/mql/mt5-shellscripts/Terminal/terminal64.exe
+ini=/mnt/c/mql/mt5-shellscripts/sockets-python/cmdmt_tester.ini
+start_ts=1766393195.6535099
+
+terminal log: /mnt/c/mql/mt5-shellscripts/Terminal/Logs/20251222.log
+KL	0	05:46:36.597	Startup	successfully initialized from start config "C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini"
+KR	0	05:46:36.753	Terminal	Dukascopy MetaTrader 5 x64 build 5472 started for Dukascopy Bank SA
+NK	0	05:46:36.753	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 32 / 63 Gb memory, 2306 / 3814 Gb disk, UAC, GMT-3
+GJ	0	05:46:36.753	Terminal	C:\mql\mt5-shellscripts\Terminal
+IN	0	05:46:36.753	Terminal	launched with C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini
+IO	2	05:46:38.480	Tester	tester not started because the account is not specified
+OD	2	05:46:38.480	Terminal	tester didn't start
+HQ	0	05:46:39.723	Terminal	exit with code -1000012353
+IG	0	05:46:39.757	Terminal	stopped with 0
+FK	0	05:46:39.868	Terminal	shutdown with -1000012353 (tester not started because the account is not specified)
+
+tester log: /mnt/c/mql/mt5-shellscripts/Terminal/Tester/Logs/20251222.log
+KN	0	05:46:37.901	Tester	Local network farm switched off
+CS	0	05:46:37.901	Tester	Cloud servers switched off
+EK	2	05:46:38.480	Tester	tester not started because the account is not specified
+
+data file: (none)
+

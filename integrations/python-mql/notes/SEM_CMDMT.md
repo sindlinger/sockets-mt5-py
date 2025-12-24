@@ -12,7 +12,7 @@ ID|TIPO|param1|param2|...
 
 - Serviço principal (socket): **9090**
   - `mt5/Services/OficialTelnetServiceSocket.mq5`
-- Serviço Python-only (socket): **9091**
+- Serviço **PyInService / pyin** (socket): **9091**
   - `mt5/Services/OficialTelnetServicePySocket.mq5`
 
 **Exemplo de linha** (texto simples):
@@ -27,9 +27,9 @@ OK\n<mensagem>\n<dados...>
 
 ## 2) MT5 -> Python (cálculo/arrays)
 
-Quando o serviço MQL precisa do Python, ele envia `PY_CALL` ou `PY_ARRAY_CALL` para o **python_bridge_server**:
+Quando o serviço MQL precisa do Python, ele envia `PY_CALL` ou `PY_ARRAY_CALL` para o **PyOutService / pyout**:
 
-- `python/python_bridge_server.py` (porta **9100** por padrão)
+- `python/python_bridge_server.py` (PyOutService / pyout, porta **9100** por padrão)
 - handlers/registry em `python/mt5_bridge.py`
 
 Fluxo típico:

@@ -1,3 +1,6 @@
 # Notas e fluxos
 
-Coloque aqui notas rápidas e fluxos de teste para a integração Python <-> MQL.
+Notas e fluxos de teste para a integracao Python <-> MQL.
+
+Arquivos:
+- `MT5_BOOTSTRAP_SERVICE.md` (servico bootstrap + agent)

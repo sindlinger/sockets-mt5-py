@@ -1,0 +1,70 @@
+run
+root=/mnt/c/mql/mt5-shellscripts/Terminal
+exe=/mnt/c/mql/mt5-shellscripts/Terminal/terminal64.exe
+ini=/mnt/c/mql/mt5-shellscripts/Terminal/cmdmt_tester.ini
+start_ts=1766475632.3757198
+
+terminal log: /mnt/c/mql/mt5-shellscripts/Terminal/Logs/20251223.log
+IK	0	04:40:31.754	Network	'86013097': previous successful authorization performed from 177.37.141.253 on 2025.12.23 09:37:54
+JG	0	04:40:32.041	Terminal	exit with code 1
+IP	0	04:40:32.043	Network	'86013097': disconnected from Dukascopy-demo-mt5-1
+CK	0	04:40:32.085	Terminal	stopped with 0
+FR	0	04:40:32.189	Terminal	shutdown with 1
+RJ	0	04:40:32.985	Startup	successfully initialized from start config "C:\mql\mt5-shellscripts\Terminal\cmdmt_tester.ini"
+IM	0	04:40:33.009	Terminal	Dukascopy MetaTrader 5 x64 build 5472 started for Dukascopy Bank SA
+GL	0	04:40:33.009	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 31 / 63 Gb memory, 2304 / 3814 Gb disk, UAC, GMT-3
+EQ	0	04:40:33.009	Terminal	C:\mql\mt5-shellscripts\Terminal
+FK	0	04:40:33.009	Terminal	launched with C:\mql\mt5-shellscripts\Terminal\cmdmt_tester.ini
+CE	0	04:40:35.567	Network	'86013097': authorized on Dukascopy-demo-mt5-1 through mt5-demoas-1
+NQ	0	04:40:35.567	Network	'86013097': previous successful authorization performed from 177.37.141.253 on 2025.12.23 09:40:31
+GS	0	04:40:35.834	Network	'86013097': terminal synchronized with Dukascopy Bank SA: 0 positions, 0 orders, 418 symbols, 0 spreads
+GR	0	04:40:35.834	Network	'86013097': trading has been enabled - hedging mode
+MK	0	04:40:36.040	Tester	automatical testing started
+FM	0	04:40:36.880	Tester	last test passed with result "successfully finished" in 0:00:00.047
+PS	0	04:40:37.896	Terminal	exit with code 0
+LM	0	04:40:37.898	Network	'86013097': disconnected from Dukascopy-demo-mt5-1
+GN	0	04:40:37.918	Terminal	stopped with 0
+RM	0	04:40:38.030	Terminal	shutdown with 0
+
+tester log: /mnt/c/mql/mt5-shellscripts/Terminal/Tester/Logs/20251223.log
+PK	0	04:40:36.873	Core 01	EURUSD: symbol synchronized, 3720 bytes of symbol info received
+NF	0	04:40:36.873	Core 01	EURUSD: load 27 bytes of history data to synchronize in 0:00:00.000
+GQ	0	04:40:36.873	Core 01	EURUSD: history synchronized from 2024.01.02 to 2025.12.22
+LG	0	04:40:36.873	Core 01	EURUSD,H1: history cache allocated for 12350 bars and contains 12298 bars from 2024.01.02 00:00 to 2025.12.19 23:00
+EP	0	04:40:36.873	Core 01	EURUSD,H1: history begins from 2024.01.02 00:00
+KE	0	04:40:36.873	Core 01	EURUSD,H1 (Dukascopy-demo-mt5-1): every tick generating
+KS	0	04:40:36.873	Core 01	testing with execution delay 1 milliseconds
+QF	0	04:40:36.873	Core 01	EURUSD,H1: testing of Experts\IndicatorStub.ex5 from 2025.12.20 00:00 to 2025.12.23 00:00 started with inputs:
+RJ	0	04:40:36.873	Core 01	  IndicatorPath=ZigZag
+EQ	0	04:40:36.873	Core 01	  IndicatorParams=
+OD	0	04:40:36.873	Core 01	program file added: \Indicators\ZigZag.ex5. 11428 bytes loaded
+CS	0	04:40:36.873	Core 01	2025.12.20 00:00:00   [IndicatorStub] Indicador ZigZag anexado com sucesso.
+HP	0	04:40:36.873	Core 01	2025.12.20 00:00:00   [IndicatorStub] Buffers salvos em cmdmt_buffers.txt
+PH	0	04:40:36.873	Core 01	final balance 10000.00 USD
+ON	0	04:40:36.873	Core 01	EURUSD,H1: 36302 ticks, 24 bars generated. Environment synchronized in 0:00:00.019. Test passed in 0:00:00.047.
+JI	0	04:40:36.873	Core 01	EURUSD,H1: total time from login to stop testing 0:00:00.066 (including 0:00:00.019 for history data synchronization)
+JK	0	04:40:36.873	Core 01	38 Mb memory used including 0.94 Mb of history data, 64 Mb of tick data
+CS	0	04:40:36.873	Core 01	log file "C:\mql\mt5-shellscripts\Terminal\Tester\Agent-127.0.0.1-3001\logs\20251223.log" written
+HL	0	04:40:36.880	Tester	automatical testing finished
+OG	0	04:40:36.880	Core 01	connection closed
+
+buffers em 20251223.log
+PI	0	04:37:55.885	Core 01	2025.12.20 00:00:00   [IndicatorStub] Buffers salvos em cmdmt_buffers.txt
+HP	0	04:40:36.873	Core 01	2025.12.20 00:00:00   [IndicatorStub] Buffers salvos em cmdmt_buffers.txt
+
+data file: /mnt/c/mql/mt5-shellscripts/Terminal/Tester/Agent-127.0.0.1-3001/MQL5/Files/cmdmt_buffers.txt
+SymbolEURUSDPeriodPERIOD_H1
+IndicatorZigZag
+--- DATA WINDOW (shift=0) ---
+buffer0value0.00000000
+buffer1value0.00000000
+buffer2value0.00000000
+buffer3value0.00000000
+buffer4value0.00000000
+--- BUFFERS (last values) ---
+buffer 0: 0.00000000 0.00000000 0.00000000 0.00000000 0.00000000
+buffer 1: 0.00000000 0.00000000 0.00000000 0.00000000 0.00000000
+buffer 2: 0.00000000 0.00000000 0.00000000 0.00000000 0.00000000
+buffer 3: 0.00000000 0.00000000 0.00000000 0.00000000 0.00000000
+buffer 4: 0.00000000 0.00000000 0.00000000 0.00000000 0.00000000
+

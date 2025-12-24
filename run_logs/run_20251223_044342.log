@@ -1,0 +1,55 @@
+run
+root=/mnt/c/mql/mt5-shellscripts/Terminal
+exe=/mnt/c/mql/mt5-shellscripts/Terminal/terminal64.exe
+ini=/mnt/c/mql/mt5-shellscripts/Terminal/cmdmt_tester.ini
+start_ts=1766475816.5436215
+
+terminal log: /mnt/c/mql/mt5-shellscripts/Terminal/Logs/20251223.log
+MD	0	04:43:37.112	Terminal	C:\mql\mt5-shellscripts\Terminal
+FN	0	04:43:37.112	Terminal	launched with C:\mql\mt5-shellscripts\Terminal\cmdmt_tester.ini
+QI	0	04:43:39.687	Network	'86013097': authorized on Dukascopy-demo-mt5-1 through mt5-demoas-1
+MR	0	04:43:39.687	Network	'86013097': previous successful authorization performed from 177.37.141.253 on 2025.12.23 09:43:35
+EP	0	04:43:39.974	Network	'86013097': terminal synchronized with Dukascopy Bank SA: 0 positions, 0 orders, 418 symbols, 0 spreads
+EF	0	04:43:39.974	Network	'86013097': trading has been enabled - hedging mode
+QL	0	04:43:40.363	Tester	automatical testing started
+FH	0	04:43:41.199	Tester	last test passed with result "successfully finished" in 0:00:00.049
+ON	0	04:43:42.461	Terminal	exit with code 0
+PI	0	04:43:42.462	Network	'86013097': disconnected from Dukascopy-demo-mt5-1
+HM	0	04:43:42.499	Terminal	stopped with 0
+CI	0	04:43:42.608	Terminal	shutdown with 0
+
+tester log: /mnt/c/mql/mt5-shellscripts/Terminal/Tester/Logs/20251223.log
+QE	0	04:43:41.192	Core 01	  IndicatorPath=ZigZag
+NJ	0	04:43:41.192	Core 01	  IndicatorParams=
+HS	0	04:43:41.192	Core 01	program file added: \Indicators\ZigZag.ex5. 10654 bytes loaded
+LJ	0	04:43:41.192	Core 01	2025.12.20 00:00:00   [IndicatorStub] Indicador ZigZag anexado com sucesso.
+OG	0	04:43:41.192	Core 01	2025.12.20 00:00:00   [IndicatorStub] Buffers salvos em cmdmt_buffers.txt
+GF	0	04:43:41.192	Core 01	final balance 10000.00 USD
+EG	0	04:43:41.192	Core 01	EURUSD,H1: 36302 ticks, 24 bars generated. Environment synchronized in 0:00:00.018. Test passed in 0:00:00.049.
+IP	0	04:43:41.192	Core 01	EURUSD,H1: total time from login to stop testing 0:00:00.067 (including 0:00:00.018 for history data synchronization)
+IR	0	04:43:41.192	Core 01	38 Mb memory used including 0.94 Mb of history data, 64 Mb of tick data
+DJ	0	04:43:41.192	Core 01	log file "C:\mql\mt5-shellscripts\Terminal\Tester\Agent-127.0.0.1-3001\logs\20251223.log" written
+FE	0	04:43:41.199	Tester	automatical testing finished
+LL	0	04:43:41.200	Core 01	connection closed
+
+buffers em 20251223.log
+PI	0	04:37:55.885	Core 01	2025.12.20 00:00:00   [IndicatorStub] Buffers salvos em cmdmt_buffers.txt
+HP	0	04:40:36.873	Core 01	2025.12.20 00:00:00   [IndicatorStub] Buffers salvos em cmdmt_buffers.txt
+OG	0	04:43:41.192	Core 01	2025.12.20 00:00:00   [IndicatorStub] Buffers salvos em cmdmt_buffers.txt
+
+data file: /mnt/c/mql/mt5-shellscripts/Terminal/Tester/Agent-127.0.0.1-3001/MQL5/Files/cmdmt_buffers.txt
+SymbolEURUSDPeriodPERIOD_H1
+IndicatorZigZag
+--- DATA WINDOW (shift=0) ---
+buffer0value0.00000000
+buffer1value0.00000000
+buffer2value0.00000000
+buffer3value0.00000000
+buffer4value0.00000000
+--- BUFFERS (last values) ---
+buffer 0: 0.00000000 0.00000000 0.00000000 0.00000000 0.00000000
+buffer 1: 0.00000000 0.00000000 0.00000000 0.00000000 0.00000000
+buffer 2: 0.00000000 0.00000000 0.00000000 0.00000000 0.00000000
+buffer 3: 0.00000000 0.00000000 0.00000000 0.00000000 0.00000000
+buffer 4: 0.00000000 0.00000000 0.00000000 0.00000000 0.00000000
+

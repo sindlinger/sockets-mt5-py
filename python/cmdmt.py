@@ -90,6 +90,14 @@ def maybe_wslpath(p: str) -> str:
             out = subprocess.check_output(["wslpath", "-u", p], stderr=subprocess.DEVNULL)
             return out.decode("utf-8", errors="replace").strip()
         except Exception:
+            # fallback manual para WSL
+            try:
+                drive = p[0].lower()
+                if p[1:3] in (":\\", ":/"):
+                    rest = p[3:].replace("\\", "/")
+                    return f"/mnt/{drive}/{rest}"
+            except Exception:
+                pass
             return p
     return p
 
@@ -502,6 +510,90 @@ def _ini_map_to_text(ini_map):
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
+def _parse_set_pairs(items):
+    out = []
+    for it in items:
+        if "=" not in it:
+            return None, f"formato invalido: {it} (use Section.Key=Valor)"
+        left, val = it.split("=", 1)
+        sec = None; key = None
+        if "." in left:
+            sec, key = left.split(".", 1)
+        elif ":" in left:
+            sec, key = left.split(":", 1)
+        else:
+            sec, key = "Tester", left
+        out.append((sec.strip(), key.strip(), val))
+    return out, ""
+
+def _ini_set(root: Path, items):
+    ini_path = root / "tester.ini"
+    ini_map = _parse_ini_to_map(ini_path) if ini_path.exists() else _default_ini_map()
+    overrides, err = _parse_set_pairs(items)
+    if not overrides:
+        return False, err
+    ini_map = _apply_overrides(ini_map, overrides)
+    # garante Tester.Login se Common.Login estiver setado
+    try:
+        c_login = str(ini_map.get("Common", {}).get("Login", "")).strip()
+        t_login = str(ini_map.get("Tester", {}).get("Login", "")).strip()
+        if c_login and not t_login:
+            ini_map.setdefault("Tester", OrderedDict())["Login"] = c_login
+    except Exception:
+        pass
+    _write_text_auto(ini_path, _ini_map_to_text(ini_map), "utf-8", b"")
+    return True, str(ini_path)
+
+def _ini_get(root: Path, items):
+    ini_path = root / "tester.ini"
+    ini_map = _parse_ini_to_map(ini_path) if ini_path.exists() else _default_ini_map()
+    res = []
+    for it in items:
+        sec = None; key = None
+        if "." in it:
+            sec, key = it.split(".", 1)
+        elif ":" in it:
+            sec, key = it.split(":", 1)
+        else:
+            sec, key = "Tester", it
+        sec = sec.strip(); key = key.strip()
+        val = ""
+        if sec in ini_map and key in ini_map[sec]:
+            val = ini_map[sec][key]
+            if sec.lower() == "common" and key.lower() == "password":
+                val = "*****"
+        res.append(f"{sec}.{key}={val}")
+    return True, res
+
+def _ini_list(root: Path):
+    ini_path = root / "tester.ini"
+    ini_map = _parse_ini_to_map(ini_path) if ini_path.exists() else _default_ini_map()
+    lines = []
+    for sec, items in ini_map.items():
+        lines.append(f"[{sec}]")
+        for k, v in items.items():
+            val = v
+            if sec.lower() == "common" and k.lower() == "password":
+                val = "*****"
+            lines.append(f"{k}={val}")
+        lines.append("")
+    return True, lines
+
+def _ini_sync(root: Path):
+    # copia Common.Login/Password/Server do Config/common.ini para tester.ini
+    c_login, c_pass, c_srv = _read_common_credentials(root)
+    if not (c_login and c_pass and c_srv):
+        return False, "common.ini incompleto (Login/Password/Server)"
+    ok, msg = _ini_set(root, [
+        f"Common.Login={c_login}",
+        f"Common.Password={c_pass}",
+        f"Common.Server={c_srv}",
+        f"Tester.Login={c_login}",
+    ])
+    if not ok:
+        return False, msg
+    return True, "synced"
+
 def _write_text_auto(path: Path, text: str, encoding: str, bom: bytes):
     if encoding.startswith("utf-16"):
         data = text.encode(encoding, "ignore")
@@ -510,6 +602,21 @@ def _write_text_auto(path: Path, text: str, encoding: str, bom: bytes):
         path.write_bytes(data)
     else:
         path.write_text(text, encoding="utf-8", errors="ignore")
+
+def _kill_terminal_processes(root: Path):
+    try:
+        exe = _find_terminal_exe(root)
+        if not exe:
+            return
+        exe_path = to_windows_path(str(exe))
+        # mata somente o terminal do caminho dedicado
+        cmd = [
+            "powershell.exe", "-NoProfile", "-Command",
+            f"Get-Process terminal64 -ErrorAction SilentlyContinue | Where-Object {{$_.Path -eq '{exe_path}'}} | Stop-Process -Force"
+        ]
+        subprocess.run(cmd, check=False)
+    except Exception:
+        pass
 
 def _list_windows_user_dirs():
     if os.name == "nt":
@@ -577,55 +684,22 @@ def _find_ini(root: Path, ini_hint=None):
     return None
 
 def _find_rach_root():
-    env = os.environ.get("CMDMT_RACH_DIR") or os.environ.get("CMDMT_MT5_TESTER_ROOT")
-    if env:
-        p = Path(maybe_wslpath(env))
+    # caminho hardcoded: pasta Terminal dentro do repo
+    repo = _find_repo_root(Path.cwd())
+    if repo:
+        p = repo / "Terminal"
         if p.exists():
             return p
-    names = ["rach1", "rach"]
-    candidates = []
-    # C:\rach1 or /mnt/c/rach1
-    if os.name == "nt":
-        base = Path("C:\\")
-    else:
-        base = Path("/mnt/c")
-    for name in names:
-        p = base / name
-        try:
-            if p.exists():
-                candidates.append(p)
-        except Exception:
-            pass
-    # user folders
-    for user in _list_windows_user_dirs():
-        for name in names:
-            p = user / name
-            try:
-                if p.exists():
-                    candidates.append(p)
-            except Exception:
-                pass
-        for sub in ("Desktop", "Documents", "Downloads"):
-            for name in names:
-                p = user / sub / name
-                try:
-                    if p.exists():
-                        candidates.append(p)
-                except Exception:
-                    pass
-    # prefer ones with terminal.exe
-    for p in candidates:
-        if _find_terminal_exe(p):
-            return p
-    if candidates:
-        return max(candidates, key=lambda x: x.stat().st_mtime)
-    # fallback: procura terminals locais em mt5-shellscripts
-    local_base = Path("/mnt/c/mql/mt5-shellscripts")
-    if local_base.exists():
-        for name in ("Terminal", "metatrader5"):
-            p = local_base / name
-            if _find_terminal_exe(p):
-                return p
+        p2 = repo / "terminal"
+        if p2.exists():
+            return p2
+        # fallback: Terminal no pai do repo
+        p3 = repo.parent / "Terminal"
+        if p3.exists():
+            return p3
+        p4 = repo.parent / "terminal"
+        if p4.exists():
+            return p4
     return None
 
 def _patch_ini_window(src: Path, width=None, height=None):
@@ -689,6 +763,29 @@ def _tail_lines(path: Path, n: int = 200):
         return []
     lines = txt.splitlines()
     return lines[-n:]
+
+def _parse_time_sec(line: str):
+    m = re.search(r"\\b(\\d{2}):(\\d{2}):(\\d{2})\\.(\\d{3})\\b", line)
+    if not m:
+        return None
+    hh, mm, ss, ms = m.groups()
+    return int(hh) * 3600 + int(mm) * 60 + int(ss) + int(ms) / 1000.0
+
+def _filter_lines_since(lines, start_ts: float):
+    try:
+        start_dt = datetime.fromtimestamp(start_ts)
+    except Exception:
+        return lines
+    start_sec = start_dt.hour * 3600 + start_dt.minute * 60 + start_dt.second + start_dt.microsecond / 1e6
+    out = []
+    for ln in lines:
+        tsec = _parse_time_sec(ln)
+        if tsec is None:
+            out.append(ln)
+            continue
+        if tsec + 1.0 >= start_sec:  # tolerancia 1s
+            out.append(ln)
+    return out
 
 def _latest_file(dir_path: Path, exts=None, after_ts=None):
     if not dir_path.exists():
@@ -801,6 +898,22 @@ def _find_prog_in_repo(kind, name):
             return src, rel2
     return None, None
 
+def _find_prog_in_terminal(kind, name, term_dir: Path):
+    base = Path(term_dir) / "MQL5" / kind
+    return _find_prog_in_dir(base, name)
+
+def _read_common_credentials(data_dir: Path):
+    for folder in ("config", "Config"):
+        p = Path(data_dir) / folder / "common.ini"
+        if p.exists():
+            ini = _parse_ini_to_map(p)
+            common = ini.get("Common", {})
+            login = str(common.get("Login", "")).strip()
+            password = str(common.get("Password", "")).strip()
+            server = str(common.get("Server", "")).strip()
+            return login, password, server
+    return "", "", ""
+
 def _ensure_dirs(data_dir):
     for sub in ("MQL5/Profiles/Tester", "MQL5/Experts", "MQL5/Indicators"):
         (Path(data_dir) / sub).mkdir(parents=True, exist_ok=True)
@@ -894,15 +1007,81 @@ def _write_predownload_set(data_dir, days_back=30, bars_target=0):
     presets_dir = Path(data_dir) / "MQL5" / "Presets"
     presets_dir.mkdir(parents=True, exist_ok=True)
     set_path = presets_dir / "CmdmtPreDownload.set"
-    txt = f"DaysBack={int(days_back)}\nBarsTarget={int(bars_target)}\n"
+    txt = (
+        f"DaysBack={int(days_back)}\n"
+        f"BarsTarget={int(bars_target)}\n"
+        "SleepMs=1000\n"
+        "MaxAttempts=120\n"
+        "WaitSync=1\n"
+        "MaxSyncAttempts=120\n"
+    )
     set_path.write_text(txt, encoding="utf-8")
     return set_path
+
+def _predownload_marker_path(data_dir: Path) -> Path:
+    return Path(data_dir) / "MQL5" / "Files" / "cmdmt_predownload.json"
+
+def _load_predownload_state(data_dir: Path):
+    try:
+        p = _predownload_marker_path(data_dir)
+        if not p.exists():
+            return None
+        txt, _, _ = _read_text_auto(p)
+        return json.loads(txt)
+    except Exception:
+        return None
+
+def _save_predownload_state(data_dir: Path, state: dict):
+    try:
+        p = _predownload_marker_path(data_dir)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        _write_text_auto(p, json.dumps(state, indent=2) + "\n", "utf-8", b"")
+    except Exception:
+        pass
 
 def _is_existing_path(p: str) -> bool:
     try:
         return Path(maybe_wslpath(p)).exists()
     except Exception:
         return False
+
+def _is_path_intent(p: str) -> bool:
+    s = p.strip().strip('"').strip("'")
+    if not s:
+        return False
+    if "\\" in s or "/" in s:
+        return True
+    if len(s) >= 2 and s[1] == ":":
+        return True
+    return False
+
+def _resolve_user_path(p: str) -> Path | None:
+    raw = p.strip().strip('"').strip("'")
+    if not raw:
+        return None
+    # caminho absoluto/relativo explicitado
+    if _is_path_intent(raw):
+        base = Path(maybe_wslpath(raw))
+        if base.exists():
+            return base
+        if base.suffix.lower() in (".mq5", ".ex5"):
+            return None
+        for ext in (".mq5", ".ex5"):
+            cand = base.with_suffix(ext)
+            if cand.exists():
+                return cand
+        return None
+    # nome simples: tenta no cwd (relativo)
+    base = Path(raw)
+    if base.exists():
+        return base
+    if base.suffix.lower() in (".mq5", ".ex5"):
+        return None
+    for ext in (".mq5", ".ex5"):
+        cand = base.with_suffix(ext)
+        if cand.exists():
+            return cand
+    return None
 
 def _is_wsl() -> bool:
     if os.environ.get("WSL_DISTRO_NAME") or os.environ.get("WSL_INTEROP"):
@@ -986,9 +1165,13 @@ def _prepare_external_file(src_path: Path, data_dir: Path, target_kind: str):
             except Exception:
                 pass
         try:
-            if not dst_existed:
-                cleanup.append((dst_dir, "copydir"))
-            shutil.copytree(src_path.parent, dst_dir, dirs_exist_ok=True)
+            if dst_dir.resolve() == src_path.parent.resolve():
+                # já está no diretório destino
+                pass
+            else:
+                if not dst_existed:
+                    cleanup.append((dst_dir, "copydir"))
+                shutil.copytree(src_path.parent, dst_dir, dirs_exist_ok=True)
         except Exception as e:
             print("ERROR não foi possível copiar diretório: " + str(e))
             return None, cleanup
@@ -1004,9 +1187,13 @@ def _prepare_external_file(src_path: Path, data_dir: Path, target_kind: str):
                 dst_existed = False
             except Exception:
                 pass
-        if not dst_existed:
-            cleanup.append((dst, "copyfile"))
-        shutil.copy2(src_path, dst)
+        if dst.resolve() == src_path.resolve():
+            # já está no destino
+            pass
+        else:
+            if not dst_existed:
+                cleanup.append((dst, "copyfile"))
+            shutil.copy2(src_path, dst)
 
     # if mq5, compile in place
     if dst.suffix.lower() == ".mq5":
@@ -1073,9 +1260,16 @@ def _wants_last_month(tokens):
 
 def run_simple(tokens, ctx):
     if not tokens:
-        print("uso: run NOME --ind|--ea [SYMBOL] [TF] [3 dias] [--predownload] [--logtail N] [--quiet]")
+        print("uso: run CAMINHO --ind|--ea [SYMBOL] [TF] [3 dias] [--model N] [--timeout SEC] [--keep-open|--shutdown] [--predownload] [--logtail N] [--quiet]")
         return
-    predownload = os.environ.get("CMDMT_PREDOWNLOAD", "0").strip().lower() not in ("0", "false", "no")
+    predownload = os.environ.get("CMDMT_PREDOWNLOAD", "1").strip().lower() not in ("0", "false", "no")
+    timeout_sec = 120
+    keep_open = False
+    shutdown_override = None
+    model_override = None
+    pre_period = None
+    pre_days = None
+    pre_bars = None
     logtail = None
     quiet = False
     name_parts = []
@@ -1091,6 +1285,80 @@ def run_simple(tokens, ctx):
         if low in ("--no-predownload", "--nopredownload"):
             predownload = False
             i += 1
+            continue
+        if low.startswith("--predownload-period=") or low.startswith("--pre-period=") or low.startswith("--pre-tf="):
+            _, val = t.split("=", 1)
+            pre_period = val.strip()
+            i += 1
+            continue
+        if low in ("--predownload-period", "--pre-period", "--pre-tf"):
+            i += 1
+            if i < len(tokens):
+                pre_period = tokens[i].strip()
+                i += 1
+                continue
+            continue
+        if low.startswith("--predownload-days=") or low.startswith("--pre-days="):
+            _, val = t.split("=", 1)
+            if val.isdigit():
+                pre_days = int(val)
+            i += 1
+            continue
+        if low in ("--predownload-days", "--pre-days"):
+            i += 1
+            if i < len(tokens) and tokens[i].isdigit():
+                pre_days = int(tokens[i])
+                i += 1
+                continue
+            continue
+        if low.startswith("--predownload-bars=") or low.startswith("--pre-bars="):
+            _, val = t.split("=", 1)
+            if val.isdigit():
+                pre_bars = int(val)
+            i += 1
+            continue
+        if low in ("--predownload-bars", "--pre-bars"):
+            i += 1
+            if i < len(tokens) and tokens[i].isdigit():
+                pre_bars = int(tokens[i])
+                i += 1
+                continue
+            continue
+        if low.startswith("--model="):
+            _, val = t.split("=", 1)
+            if val.isdigit():
+                model_override = int(val)
+            i += 1
+            continue
+        if low in ("--model",):
+            i += 1
+            if i < len(tokens) and tokens[i].isdigit():
+                model_override = int(tokens[i])
+                i += 1
+                continue
+            continue
+        if low in ("--keep-open", "--keep", "--no-shutdown"):
+            keep_open = True
+            shutdown_override = 0
+            i += 1
+            continue
+        if low in ("--shutdown", "--close"):
+            shutdown_override = 1
+            i += 1
+            continue
+        if low.startswith("--timeout=") or low.startswith("--limit="):
+            _, val = t.split("=", 1)
+            if val.isdigit():
+                timeout_sec = int(val)
+            i += 1
+            continue
+        if low in ("--timeout", "--limit"):
+            i += 1
+            if i < len(tokens) and tokens[i].isdigit():
+                timeout_sec = int(tokens[i])
+                i += 1
+                continue
+            # sem valor, ignora
             continue
         if low in ("--quiet", "--silent", "-q"):
             quiet = True
@@ -1123,7 +1391,7 @@ def run_simple(tokens, ctx):
         if low in ("--ea", "--expert"):
             mode = "ea"
     if not name_parts:
-        print("uso: run NOME --ind|--ea [SYMBOL] [TF] [3 dias] [--predownload] [--logtail N] [--quiet]")
+        print("uso: run CAMINHO --ind|--ea [SYMBOL] [TF] [3 dias] [--model N] [--timeout SEC] [--keep-open|--shutdown] [--predownload] [--predownload-period TF] [--predownload-days N] [--predownload-bars N] [--logtail N] [--quiet]")
         return
     if mode is None:
         print("erro: informe se é indicador ou expert usando --ind ou --ea")
@@ -1144,7 +1412,7 @@ def run_simple(tokens, ctx):
         tf = ctx.get("tf") or DEFAULT_TF
     prog_name = " ".join(name_parts).strip()
     if not prog_name:
-        print("uso: run NOME --ind|--ea [SYMBOL] [TF] [3 dias] [--predownload] [--logtail N] [--quiet]")
+        print("uso: run CAMINHO --ind|--ea [SYMBOL] [TF] [3 dias] [--model N] [--timeout SEC] [--keep-open|--shutdown] [--predownload] [--predownload-period TF] [--predownload-days N] [--predownload-bars N] [--logtail N] [--quiet]")
         return
 
     from_d, to_d = _parse_dates(tokens)
@@ -1179,41 +1447,24 @@ def run_simple(tokens, ctx):
 
     ind_src = ind_rel = exp_src = exp_rel = None
     cleanup = []
-    if mode != "ea":
-        ind_src, ind_rel = _find_prog_in_dir(Path(data_dir) / "MQL5" / "Indicators", prog_name)
-    if mode != "ind":
-        exp_src, exp_rel = _find_prog_in_dir(Path(data_dir) / "MQL5" / "Experts", prog_name)
-    # caminho externo (qualquer pasta)
-    if _is_existing_path(prog_name):
-        src_path = Path(maybe_wslpath(prog_name))
-        if mode == "ind":
-            ind_rel, cleanup = _prepare_external_file(src_path, data_dir, "Indicators")
-        else:
-            exp_rel, cleanup = _prepare_external_file(src_path, data_dir, "Experts")
-    if not ind_src and not exp_src:
-        if mode != "ea":
-            src, rel = _find_prog_in_repo("Indicators", prog_name)
-            if src:
-                dst = Path(data_dir) / "MQL5" / "Indicators" / Path(*rel.split("\\"))
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                dst = dst.with_suffix(src.suffix)
-                shutil.copy2(src, dst)
-                ind_src, ind_rel = dst, _strip_ext(rel)
-        if mode != "ind" and not ind_src:
-            src, rel = _find_prog_in_repo("Experts", prog_name)
-            if src:
-                dst = Path(data_dir) / "MQL5" / "Experts" / Path(*rel.split("\\"))
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                dst = dst.with_suffix(src.suffix)
-                shutil.copy2(src, dst)
-                exp_src, exp_rel = dst, _strip_ext(rel)
+    src_path = _resolve_user_path(prog_name)
+    if not src_path:
+        print("ERROR caminho do arquivo nao encontrado (use caminho absoluto ou relativo ao cwd)")
+        return
+    if src_path.is_dir():
+        print("ERROR passe um arquivo .ex5 ou .mq5 (nao pasta)")
+        return
+    if mode == "ind":
+        ind_rel, cleanup = _prepare_external_file(src_path, data_dir, "Indicators")
+    else:
+        exp_rel, cleanup = _prepare_external_file(src_path, data_dir, "Experts")
 
     overrides = []
     if mode == "ind" and not ind_rel:
-        print("ERROR indicador não encontrado (use nome/caminho correto)")
+        print("ERROR indicador nao encontrado (use caminho correto)")
         return
     if mode == "ea" and not exp_rel:
-        print("ERROR expert não encontrado (use nome/caminho correto)")
+        print("ERROR expert nao encontrado (use caminho correto)")
         return
 
     if ind_rel and not exp_rel:
@@ -1234,13 +1485,23 @@ def run_simple(tokens, ctx):
         ("Tester", "Period", tf),
         ("Tester", "FromDate", from_d),
         ("Tester", "ToDate", to_d),
-        ("Tester", "ShutdownTerminal", "1"),
     ]
+    if model_override is not None:
+        overrides.append(("Tester", "Model", str(model_override)))
+    if shutdown_override is not None:
+        overrides.append(("Tester", "ShutdownTerminal", "0" if shutdown_override == 0 else "1"))
 
-    # defaults via env (para não pedir login na linha de comando)
-    env_login = os.environ.get("CMDMT_TESTER_LOGIN", "").strip()
-    env_pass  = os.environ.get("CMDMT_TESTER_PASSWORD", "").strip()
-    env_srv   = os.environ.get("CMDMT_TESTER_SERVER", "").strip()
+    # credenciais hardcoded no terminal dedicado (Config/common.ini)
+    env_login = ""
+    env_pass  = ""
+    env_srv   = ""
+    c_login, c_pass, c_srv = _read_common_credentials(data_dir)
+    if c_login:
+        env_login = c_login
+    if c_pass:
+        env_pass = c_pass
+    if c_srv:
+        env_srv = c_srv
     if env_login:
         overrides.append(("Tester", "Login", env_login))
         overrides.append(("Common", "Login", env_login))
@@ -1253,44 +1514,74 @@ def run_simple(tokens, ctx):
     if predownload:
         pre_name = _ensure_predownload_script(data_dir)
         if pre_name:
-            days_back = 30
+            # predownload usa variaveis (sem hardcode):
+            # - Period: --predownload-period/--pre-period, ou StartUp.Period do tester.ini, ou Period do teste
+            # - Days/Bars: --predownload-days/--predownload-bars ou derivado do intervalo do teste
+            pre_period_eff = None
+            if pre_period:
+                pre_period_eff = pre_period
+            else:
+                try:
+                    ini_base = _parse_ini_to_map(Path(data_dir) / "tester.ini")
+                    pre_period_eff = str(ini_base.get("StartUp", {}).get("Period", "")).strip()
+                except Exception:
+                    pre_period_eff = ""
+            if not pre_period_eff:
+                pre_period_eff = tf
             try:
                 fd = datetime.strptime(from_d, "%Y.%m.%d").date()
                 td = datetime.strptime(to_d, "%Y.%m.%d").date()
-                days_back = max(1, (td - fd).days + 1)
+                days_needed = max(1, (td - fd).days + 1)
             except Exception:
-                pass
-            _write_predownload_set(data_dir, days_back=days_back, bars_target=0)
-            pre_tokens = [
-                "--root", str(root),
-                "--timeout", "60",
-                "--minimized",
-                "--portable",
-                "--set", f"StartUp.Script={pre_name}",
-                "--set", "StartUp.ScriptParameters=CmdmtPreDownload.set",
-                "--set", f"StartUp.Symbol={sym}",
-                "--set", f"StartUp.Period={tf}",
-                "--set", "StartUp.ShutdownTerminal=1",
-                "--set", "Tester.Expert=",
-                "--set", "Tester.ExpertParameters=",
-            ]
-            if logtail is not None:
-                pre_tokens += ["--logtail", str(logtail)]
-            if quiet:
-                pre_tokens += ["--quiet"]
-            if env_login:
-                pre_tokens += ["--set", f"Common.Login={env_login}"]
-            if env_pass:
-                pre_tokens += ["--set", f"Common.Password={env_pass}"]
-            if env_srv:
-                pre_tokens += ["--set", f"Common.Server={env_srv}"]
-            run_mt5_tester(pre_tokens)
+                days_needed = 30
+            if pre_days is not None:
+                days_back = int(pre_days)
+            else:
+                days_back = max(days_needed + 2, 10)
+            bars_target = int(pre_bars) if pre_bars is not None else 0
+            # evita baixar toda hora se já houver predownload recente para o mesmo símbolo
+            state = _load_predownload_state(data_dir)
+            now_ts = int(time.time())
+            explicit_pre = (pre_period is not None) or (pre_days is not None) or (pre_bars is not None)
+            if (not explicit_pre) and state and state.get("symbol")==sym and state.get("period")==pre_period_eff:
+                if int(state.get("days_back", 0)) >= int(days_back) and int(state.get("bars_target", 0)) >= int(bars_target) and (now_ts - int(state.get("ts", 0))) < 12*3600:
+                    pre_name = None
+            if pre_name:
+                _write_predownload_set(data_dir, days_back=days_back, bars_target=bars_target)
+                pre_tokens = [
+                    "--root", str(root),
+                    "--timeout", str(timeout_sec),
+                    "--minimized",
+                    "--portable",
+                    "--phase", "predownload",
+                    "--no-tester",
+                    "--set", f"StartUp.Script={pre_name}",
+                    "--set", "StartUp.ScriptParameters=CmdmtPreDownload.set",
+                    "--set", f"StartUp.Symbol={sym}",
+                    "--set", f"StartUp.Period={pre_period_eff}",
+                    "--set", "StartUp.ShutdownTerminal=1",
+                    "--set", "Tester.Expert=",
+                    "--set", "Tester.ExpertParameters=",
+                ]
+                if logtail is not None:
+                    pre_tokens += ["--logtail", str(logtail)]
+                if quiet:
+                    pre_tokens += ["--quiet"]
+                if env_login:
+                    pre_tokens += ["--set", f"Common.Login={env_login}"]
+                if env_pass:
+                    pre_tokens += ["--set", f"Common.Password={env_pass}"]
+                if env_srv:
+                    pre_tokens += ["--set", f"Common.Server={env_srv}"]
+                run_mt5_tester(pre_tokens)
+                _save_predownload_state(data_dir, {"symbol": sym, "period": pre_period_eff, "days_back": int(days_back), "bars_target": int(bars_target), "ts": now_ts})
 
     tester_tokens = [
         "--root", str(root),
-        "--timeout", "60",
+        "--timeout", str(timeout_sec),
         "--minimized",
         "--portable",
+        "--phase", "tester",
     ]
     if logtail is not None:
         tester_tokens += ["--logtail", str(logtail)]
@@ -1339,9 +1630,9 @@ def run_mt5_tester(tokens):
         "portable": None,
         "logtail": 50,
         "quiet": False,
-        "screenshot": None,
-        "screenshot_enabled": False,
         "buffers": True,
+        "phase": "tester",
+        "no_tester": False,
         "set": [],
     }
     i = 0
@@ -1381,14 +1672,12 @@ def run_mt5_tester(tokens):
                 opts["logtail"] = int(tokens[i])
         elif t in ("--quiet", "--silent", "-q"):
             opts["quiet"] = True
-        elif t == "--screenshot":
+        elif t == "--phase":
             i += 1
-            opts["screenshot"] = tokens[i] if i < len(tokens) else None
-            opts["screenshot_enabled"] = True
-        elif t == "--screenshot-on":
-            opts["screenshot_enabled"] = True
-        elif t == "--no-screenshot":
-            opts["screenshot_enabled"] = False
+            if i < len(tokens):
+                opts["phase"] = tokens[i].strip().lower()
+        elif t == "--no-tester":
+            opts["no_tester"] = True
         elif t in ("--set", "-S"):
             i += 1
             if i < len(tokens):
@@ -1434,12 +1723,12 @@ def run_mt5_tester(tokens):
 
     root = Path(maybe_wslpath(opts["root"])) if opts["root"] else _find_rach_root()
     if not root or not root.exists():
-        print("ERROR rach_root_not_found (use --root PATH or CMDMT_RACH_DIR)")
+        print("ERROR terminal_root_not_found (esperado ./Terminal dentro do repo)")
         return False
 
     exe = _find_terminal_exe(root)
     if not exe:
-        print("ERROR terminal_not_found (não achei terminal64.exe em rach)")
+        print("ERROR terminal_not_found (não achei terminal64.exe em rash)")
         return False
 
     ini = _find_ini(root, opts["ini"])
@@ -1479,11 +1768,20 @@ def run_mt5_tester(tokens):
         if "ShutdownTerminal" not in ini_map[sec] or str(ini_map[sec]["ShutdownTerminal"]).strip() == "":
             ini_map[sec]["ShutdownTerminal"] = "1"
 
+    if opts["no_tester"]:
+        if "Tester" in ini_map:
+            ini_map.pop("Tester", None)
     tester_expert = str(ini_map.get("Tester", {}).get("Expert", "")).strip()
     startup_expert = str(ini_map.get("StartUp", {}).get("Expert", "")).strip()
     startup_script = str(ini_map.get("StartUp", {}).get("Script", "")).strip()
-    if not tester_expert and not startup_expert and not startup_script:
+    if startup_script.lower() in ("none", "null"):
+        ini_map.setdefault("StartUp", OrderedDict())["Script"] = ""
+        startup_script = ""
+    if (not opts["no_tester"]) and (not tester_expert and not startup_expert and not startup_script):
         print("ERROR Tester.Expert vazio (use --expert ou --set Tester.Expert=...)")
+        return False
+    if opts["no_tester"] and (not startup_expert and not startup_script):
+        print("ERROR StartUp vazio (use --set StartUp.Script=...)")
         return False
 
     ini_out = base_dir / "cmdmt_tester.ini"
@@ -1566,23 +1864,89 @@ def run_mt5_tester(tokens):
         cand = _latest_file(d, exts={".log"}, after_ts=start_ts)
         if cand and (not latest_term or cand.stat().st_mtime > latest_term.stat().st_mtime):
             latest_term = cand
+    if not latest_term:
+        for d in logs_dirs:
+            cand = _latest_file(d, exts={".log"})
+            if cand and (not latest_term or cand.stat().st_mtime > latest_term.stat().st_mtime):
+                latest_term = cand
     latest_test = None
     for d in tlogs_dirs:
         cand = _latest_file(d, exts={".log"}, after_ts=start_ts)
         if cand and (not latest_test or cand.stat().st_mtime > latest_test.stat().st_mtime):
             latest_test = cand
+    if not latest_test:
+        for d in tlogs_dirs:
+            cand = _latest_file(d, exts={".log"})
+            if cand and (not latest_test or cand.stat().st_mtime > latest_test.stat().st_mtime):
+                latest_test = cand
+    term_lines = _tail_lines(latest_term, opts["logtail"]) if latest_term else []
+
+    # logs de scripts/experts (MQL5/Logs)
+    mql5_log = None
+    for d in [data_dir / "MQL5" / "Logs"]:
+        cand = _latest_file(d, exts={".log"}, after_ts=start_ts)
+        if cand and (not mql5_log or cand.stat().st_mtime > mql5_log.stat().st_mtime):
+            mql5_log = cand
+    if not mql5_log:
+        for d in [data_dir / "MQL5" / "Logs"]:
+            cand = _latest_file(d, exts={".log"})
+            if cand and (not mql5_log or cand.stat().st_mtime > mql5_log.stat().st_mtime):
+                mql5_log = cand
+    mql5_lines = _tail_lines(mql5_log, opts["logtail"]) if mql5_log else []
+    test_lines = _tail_lines(latest_test, opts["logtail"]) if latest_test else []
+
+    # resumo de erros (linhas relevantes nas últimas linhas dos logs)
+    def _err_lines(lines, phase, label):
+        if not lines:
+            return []
+        pats = [
+            "error", "fail", "failed", "no history", "not synchronized",
+            "cannot select", "tester didn't start", "shutdown with",
+            "no expert specified", "invalid", "denied", "timeout"
+        ]
+        success_markers = ("test passed", "automatical testing started")
+        has_success = any(sm in ln.lower() for ln in lines for sm in success_markers)
+        out = []
+        for ln in lines:
+            l = ln.lower()
+            if "shutdown with 0" in l or "shutdown with 1" in l or "exit with code 0" in l or "stopped with 0" in l:
+                continue
+            if has_success and ("no expert specified" in l or "tester didn't start" in l):
+                continue
+            if phase == "predownload" and "no expert specified" in l:
+                continue
+            if any(p in l for p in pats):
+                out.append(f"[{label}] {ln}")
+        return out
+
+    err_bucket = []
+    for lines, label in ((term_lines, "terminal"), (test_lines, "tester"), (mql5_lines, "mql5")):
+        if not lines:
+            continue
+        lines = _filter_lines_since(lines, start_ts)
+        err_bucket += _err_lines(lines, opts["phase"], label)
+    if not opts["quiet"]:
+        _print_block("erros:", err_bucket[-50:] if err_bucket else ["(nenhum)"])
+    _append_run_log(run_log, "erros:", err_bucket[-50:] if err_bucket else ["(nenhum)"])
+
     if latest_term:
-        lines = _tail_lines(latest_term, opts["logtail"])
         if not opts["quiet"]:
-            _print_block(f"terminal log: {latest_term}", lines)
-        _append_run_log(run_log, f"terminal log: {latest_term}", lines)
+            _print_block(f"terminal log: {latest_term}", term_lines)
+        _append_run_log(run_log, f"terminal log: {latest_term}", term_lines)
     else:
         _append_run_log(run_log, "terminal log: (none)", [])
-    if latest_test:
-        lines = _tail_lines(latest_test, opts["logtail"])
+
+    if mql5_log:
         if not opts["quiet"]:
-            _print_block(f"tester log: {latest_test}", lines)
-        _append_run_log(run_log, f"tester log: {latest_test}", lines)
+            _print_block(f"mql5 log: {mql5_log}", mql5_lines)
+        _append_run_log(run_log, f"mql5 log: {mql5_log}", mql5_lines)
+    else:
+        _append_run_log(run_log, "mql5 log: (none)", [])
+
+    if latest_test:
+        if not opts["quiet"]:
+            _print_block(f"tester log: {latest_test}", test_lines)
+        _append_run_log(run_log, f"tester log: {latest_test}", test_lines)
     else:
         _append_run_log(run_log, "tester log: (none)", [])
 
@@ -1598,19 +1962,6 @@ def run_mt5_tester(tokens):
                     _print_block(f"buffers em {log.name}", hits[-50:])
                 _append_run_log(run_log, f"buffers em {log.name}", hits[-50:])
 
-    # screenshot (desativado por padrão)
-    latest_shot = None
-    if opts["screenshot_enabled"]:
-        shot_dirs = [
-            data_dir / "MQL5" / "Tester" / "Files",
-            data_dir / "MQL5" / "Files",
-            data_dir / "Tester" / "Files",
-            data_dir / "Files",
-        ]
-        for d in shot_dirs:
-            shot = _latest_file(d, exts={".png", ".jpg", ".jpeg"}, after_ts=start_ts)
-            if shot and (not latest_shot or shot.stat().st_mtime > latest_shot.stat().st_mtime):
-                latest_shot = shot
     # dados (buffers) em arquivo, se existirem
     data_dirs = [
         data_dir / "MQL5" / "Tester" / "Files",
@@ -1633,6 +1984,11 @@ def run_mt5_tester(tokens):
         cand = _latest_file(d, exts={".txt", ".csv"}, after_ts=start_ts)
         if cand and (not data_latest or cand.stat().st_mtime > data_latest.stat().st_mtime):
             data_latest = cand
+    if not data_latest:
+        for d in data_dirs:
+            cand = _latest_file(d, exts={".txt", ".csv"})
+            if cand and (not data_latest or cand.stat().st_mtime > data_latest.stat().st_mtime):
+                data_latest = cand
     if data_latest:
         lines = _tail_lines(data_latest, 50)
         if not opts["quiet"]:
@@ -1640,28 +1996,6 @@ def run_mt5_tester(tokens):
         _append_run_log(run_log, f"data file: {data_latest}", lines)
     else:
         _append_run_log(run_log, "data file: (none)", [])
-    if latest_shot:
-        _qprint(f"screenshot: {latest_shot}")
-        _append_run_log(run_log, "screenshot: " + str(latest_shot), [])
-        # copia screenshot para run_logs
-        try:
-            dst = run_dir / f"run_{run_stamp}{latest_shot.suffix.lower()}"
-            shutil.copy2(latest_shot, dst)
-            _qprint(f"run_screenshot: {dst}")
-        except Exception as e:
-            print(f"ERROR screenshot_copy {e}")
-        if opts["screenshot"]:
-            try:
-                dst = Path(maybe_wslpath(opts["screenshot"]))
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(latest_shot, dst)
-                _qprint(f"screenshot_copy: {dst}")
-            except Exception as e:
-                print(f"ERROR screenshot_copy {e}")
-    else:
-        if opts["screenshot_enabled"] and not opts["quiet"]:
-            print("screenshot: não encontrado (use ChartScreenShot no EA/indicador ou TestVisualization)")
-        _append_run_log(run_log, "screenshot: (none)", [])
     if opts["quiet"]:
         print(f"run_log: {run_log}")
     return True
@@ -2228,10 +2562,22 @@ class TransportSocket:
 
 # ------------------- Parsing de comandos -------------------
 def parse_user_line(line: str, ctx):
+    line_str = line.strip()
     try:
-        parts = shlex.split(line.strip())
+        parts = shlex.split(line_str)
+        # se houver caminho Windows sem aspas, o shlex pode remover '\\'
+        if re.search(r"[A-Za-z]:[\\\\/]", line_str) and not any("\\" in p for p in parts):
+            parts = shlex.split(line_str, posix=False)
     except Exception:
-        parts = line.strip().split()
+        parts = line_str.split()
+    # remove aspas externas se vierem no token (posix=False)
+    cleaned = []
+    for p in parts:
+        if len(p) >= 2 and ((p[0] == p[-1]) and p[0] in ("'", '"')):
+            cleaned.append(p[1:-1])
+        else:
+            cleaned.append(p)
+    parts = cleaned
     if not parts:
         return None
     # ---- Frases amigáveis em primeira palavra ----
@@ -2256,6 +2602,26 @@ def parse_user_line(line: str, ctx):
             return None
         target = " ".join(parts[1:])
         return "COMPILE", [target]
+
+    if head in ("ini", "config"):
+        if len(parts) < 2:
+            print("uso: ini set Section.Key=Valor | ini get Section.Key")
+            return None
+        action = parts[1].lower()
+        if action in ("set", "add", "put"):
+            if len(parts) < 3:
+                print("uso: ini set Section.Key=Valor"); return None
+            return "INI_SET", parts[2:]
+        if action in ("get", "show"):
+            if len(parts) < 3:
+                print("uso: ini get Section.Key"); return None
+            return "INI_GET", parts[2:]
+        if action in ("ls", "list", "all"):
+            return "INI_LIST", []
+        if action in ("sync", "pull"):
+            return "INI_SYNC", []
+        print("uso: ini set Section.Key=Valor | ini get Section.Key")
+        return None
 
     if head in ("run", "rodar"):
         return "RUN_SIMPLE", parts[1:]
@@ -2531,13 +2897,15 @@ def parse_user_line(line: str, ctx):
             "  hotkey run NOME | hotkey show NOME | hotkey del NOME\n"
             "  hotkey <sequencia> [save NOME] (executa ou salva)\n"
             "  digite NOME ou @NOME           (executa hotkey salva; '@' só no começo)\n"
+            "  ini set Section.Key=Valor      (salva defaults em Terminal/tester.ini)\n"
+            "  ini get Section.Key            (lê valor; Common.Password é mascarado)\n"
+            "  ini list                        (mostra ini inteiro; senha mascarada)\n"
+            "  ini sync                        (copia Common.* de Terminal/Config/common.ini)\n"
             "  tester [--root PATH] [--ini FILE] [--timeout SEC] [--width W --height H]\n"
             "         [--headless|--minimized] [--portable|--no-portable] [--logtail N|--log N] [--quiet]\n"
-            "         [--screenshot PATH|--screenshot-on|--no-screenshot]\n"
             "         [--set Section.Key=Val ...] (ex: --set Tester.Expert=Examples\\\\MACD\\\\MACD Sample)\n"
             "         (default size: 640x480, ShutdownTerminal=1)\n"
-            "  run NOME --ind|--ea [SYMBOL] [TF] [3 dias] [--predownload] [--logtail N] [--quiet] (tester simples)\n"
-            "    env: CMDMT_TESTER_LOGIN / CMDMT_TESTER_PASSWORD / CMDMT_TESTER_SERVER\n"
+            "  run CAMINHO --ind|--ea [SYMBOL] [TF] [3 dias] [--model N] [--timeout SEC] [--keep-open|--shutdown] [--predownload] [--predownload-period TF] [--predownload-days N] [--predownload-bars N] [--no-predownload] [--logtail N] [--quiet] (tester simples)\n"
             "  logs [last|ARQUIVO.log] [N] (listar/mostrar logs do run)\n"
             "  cmd TYPE [PARAMS...]         (envia TYPE direto)\n"
             "  PY_CONNECT | PY_DISCONNECT   (via cmd TYPE ...)\n"
@@ -2547,7 +2915,8 @@ def parse_user_line(line: str, ctx):
             "  json <json inteiro>          (envia JSON bruto)\n"
             "  quit\n"
             "\nObs: default = EURUSD H1 (se não informar SYMBOL/TF)\n"
-            "Obs: ';' separa múltiplos comandos em qualquer modo\n"
+            "Obs: ';' separa multiplos comandos. No modo nao-interativo use aspas:\n"
+            "      python cmdmt.py \"open EURUSD H1; attachind ZigZag 1\"\n"
         )
         return None
 
@@ -3045,7 +3414,6 @@ def main():
     ap.add_argument("--symbol", help="symbol padrão (ex: EURUSD)", default=None)
     ap.add_argument("--tf", help="timeframe padrão (ex: H1)", default=None)
     ap.add_argument("--sub", help="subwindow padrão para indicadores", default=None)
-    ap.add_argument("--seq", help="sequência de comandos separados por ';' (modo não interativo)", default=None)
     ap.add_argument("--file", help="arquivo texto com um comando por linha (modo não interativo)", default=None)
     ap.add_argument("command", nargs="*", help="comando direto (ex: ping, \"chart list\")")
     args, extra = ap.parse_known_args()
@@ -3111,12 +3479,10 @@ def main():
         except Exception:
             pass
 
-    # Fonte de comandos não interativa: positional, --seq, --file ou stdin pipe
+    # Fonte de comandos não interativa: positional, --file ou stdin pipe
     lines = None
     if args.command:
         lines = [" ".join(args.command)]
-    elif args.seq is not None:
-        lines = [ln.strip() for ln in split_seq_line(args.seq) if ln.strip()!=""]
     elif args.file is not None:
         with open(args.file, "r", encoding="utf-8", errors="ignore") as f:
             lines = [ln.strip() for ln in f.readlines() if ln.strip()!=""]
@@ -3155,6 +3521,53 @@ def main():
             return
         cmd_type, params = parsed
         cmd_id = gen_id()
+
+        if cmd_type == "INI_SET":
+            root = _find_rach_root()
+            if not root:
+                print("ERROR terminal_root_not_found (esperado ./Terminal dentro do repo)")
+                return
+            ok, msg = _ini_set(root, params)
+            if ok:
+                print(f"OK ini set ({msg})")
+            else:
+                print(f"ERROR {msg}")
+            return
+        if cmd_type == "INI_GET":
+            root = _find_rach_root()
+            if not root:
+                print("ERROR terminal_root_not_found (esperado ./Terminal dentro do repo)")
+                return
+            ok, res = _ini_get(root, params)
+            if ok:
+                for ln in res:
+                    print(ln)
+            else:
+                print("ERROR ini get")
+            return
+        if cmd_type == "INI_LIST":
+            root = _find_rach_root()
+            if not root:
+                print("ERROR terminal_root_not_found (esperado ./Terminal dentro do repo)")
+                return
+            ok, res = _ini_list(root)
+            if ok:
+                for ln in res:
+                    print(ln)
+            else:
+                print("ERROR ini list")
+            return
+        if cmd_type == "INI_SYNC":
+            root = _find_rach_root()
+            if not root:
+                print("ERROR terminal_root_not_found (esperado ./Terminal dentro do repo)")
+                return
+            ok, msg = _ini_sync(root)
+            if ok:
+                print("OK ini sync (" + msg + ")")
+            else:
+                print("ERROR " + msg)
+            return
 
         def send_cmd(cmd_type_inner, params_inner):
             line_out = "|".join([gen_id(), cmd_type_inner] + params_inner)

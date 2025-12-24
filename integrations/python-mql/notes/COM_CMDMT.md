@@ -1,6 +1,7 @@
 # Integração Python <-> MT5 (com CMDMT)
 
-Este fluxo descreve o uso do **cmdmt** como CLI/cliente para falar com o serviço MT5 e/ou com o Python‑Bridge.
+Este fluxo descreve o uso do **cmdmt** como CLI/cliente para falar com o serviço MT5 (Telnet 9090)
+e, opcionalmente, para testes rápidos com o **PyInService / PyOutService**.
 
 ## 1) CMDMT -> MT5 (serviço principal)
 
@@ -12,10 +13,15 @@ Este fluxo descreve o uso do **cmdmt** como CLI/cliente para falar com o serviç
 
 ### Exemplo
 ```
-python python/cmdmt.py --host host.docker.internal --port 9090 --seq "ping"
+python python/cmdmt.py --host host.docker.internal --port 9090 "ping"
 ```
 
-## 2) CMDMT -> serviço Python-only (9091)
+### Sequência (aspas + ';')
+```
+python python/cmdmt.py "open EURUSD H1; attachind ZigZag 1"
+```
+
+## 2) CMDMT -> PyInService (pyin) (9091)
 
 Comandos:
 
@@ -25,9 +31,11 @@ pyservice cmd TYPE [PARAMS...]
 pyservice raw LINE
 ```
 
-Isso fala direto com `OficialTelnetServicePySocket.mq5`.
+Isso fala direto com `OficialTelnetServicePySocket.mq5` (**PyInService / pyin**).
+Use apenas para **testes rápidos**; o fluxo exclusivo do Python deve conectar direto no 9091
+sem depender do cmdmt.
 
-## 3) CMDMT -> Python Bridge (9100)
+## 3) CMDMT -> PyOutService (pyout) (9100)
 
 Comandos:
 
@@ -37,7 +45,7 @@ pybridge ping [HOST] [PORT]
 pybridge ensure [HOST] [PORT]
 ```
 
-Isso inicia/checa o `python/python_bridge_server.py`.
+Isso inicia/checa o `python/python_bridge_server.py` (**PyOutService / pyout**).
 
 ## 4) Hotkeys (atalhos CMDMT)
 
@@ -64,6 +72,27 @@ SALVAR
 ### Sequência inline (sem salvar)
 ```
 hotkey "open EURUSD H1; attachind ZigZag 1"
+```
+
+## 5) Config INI (tester)
+
+Grava e lê variáveis do `Terminal/tester.ini` usando o mapeamento do `cmdmt`.
+
+```
+ini set Common.Login=123456 Common.Password=xyz Common.Server=MetaQuotes-Demo
+ini get Common.Login Common.Password Common.Server
+ini list
+```
+
+- `ini get` e `ini list` **mascaram** `Common.Password`.
+
+## 6) RUN (tester simples)
+
+O `run` exige **caminho do indicador/EA** (absoluto ou relativo ao cwd).  
+Se existir, copia para o terminal interno e executa.
+
+```
+python python/cmdmt.py "run C:\...\ZigZag.mq5 --ind EURUSD H1 3 dias"
 ```
 
 ## Quando usar

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Python bridge para MT5.
+PyOutService (pyout) para MT5.
 Modo default: conecta no Gateway (porta única) e responde PY_CALL / PY_ARRAY_CALL.
 Modo alternativo: servidor dedicado (legacy).
 
@@ -263,7 +263,7 @@ class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
 
 def run_server():
     with ThreadedTCPServer((HOST, PORT), Handler) as srv:
-        print(f"Python bridge escutando em {HOST}:{PORT} (server)")
+        print(f"PyOutService escutando em {HOST}:{PORT} (server)")
         srv.serve_forever()
 
 

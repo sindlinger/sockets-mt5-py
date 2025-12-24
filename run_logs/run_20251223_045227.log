@@ -1,0 +1,28 @@
+run
+root=/mnt/c/mql/mt5-shellscripts/Terminal
+exe=/mnt/c/mql/mt5-shellscripts/Terminal/terminal64.exe
+ini=/mnt/c/mql/mt5-shellscripts/Terminal/cmdmt_tester.ini
+start_ts=1766476343.7676475
+
+terminal log: /mnt/c/mql/mt5-shellscripts/Terminal/Logs/20251223.log
+QN	0	04:52:27.285	Network	'86013097': trading has been enabled - hedging mode
+LH	0	04:52:27.644	Terminal	exit with code 1
+GD	0	04:52:27.646	Network	'86013097': disconnected from Dukascopy-demo-mt5-1
+EG	0	04:52:27.688	Terminal	stopped with 0
+DG	0	04:52:27.791	Terminal	shutdown with 1
+
+tester log: /mnt/c/mql/mt5-shellscripts/Terminal/Tester/Logs/20251223.log
+RL	0	04:50:36.851	Tester	MQL5 Cloud Server "MQL5 Cloud Europe 3: 10 gbit" found
+LI	0	04:50:36.851	Tester	MQL5 Cloud Server "MQL5 Cloud Asia 1: 1 gbit" found
+LP	0	04:52:26.007	Tester	Local network farm switched off
+DI	0	04:52:26.007	Tester	Cloud servers switched off
+OP	2	04:52:26.624	Tester	no expert specified in the start config
+
+buffers em 20251223.log
+PI	0	04:37:55.885	Core 01	2025.12.20 00:00:00   [IndicatorStub] Buffers salvos em cmdmt_buffers.txt
+HP	0	04:40:36.873	Core 01	2025.12.20 00:00:00   [IndicatorStub] Buffers salvos em cmdmt_buffers.txt
+OG	0	04:43:41.192	Core 01	2025.12.20 00:00:00   [IndicatorStub] Buffers salvos em cmdmt_buffers.txt
+FN	0	04:47:53.425	Core 01	2025.12.16 00:00:00   [IndicatorStub] Buffers salvos em cmdmt_buffers.txt
+
+data file: (none)
+

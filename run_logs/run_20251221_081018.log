@@ -1,0 +1,85 @@
+run
+root=/mnt/c/mql/mt5-shellscripts/Terminal
+exe=/mnt/c/mql/mt5-shellscripts/Terminal/terminal64.exe
+ini=/mnt/c/mql/mt5-shellscripts/sockets-python/cmdmt_tester.ini
+start_ts=1766315357.8534734
+
+terminal log: /mnt/c/mql/mt5-shellscripts/Terminal/Logs/20251221.log
+PO	0	07:41:23.431	Terminal	updating C:\mql\mt5-shellscripts\Terminal\MQL5 folder
+LJ	0	07:41:23.580	Terminal	453 files updated
+IL	0	07:41:23.675	Startup	successfully initialized from start config "C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini"
+CR	0	07:41:23.967	Terminal	Dukascopy MetaTrader 5 x64 build 5472 started for Dukascopy Bank SA
+GK	0	07:41:23.967	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 32 / 63 Gb memory, 2310 / 3814 Gb disk, UAC, GMT-3
+OJ	0	07:41:23.967	Terminal	C:\mql\mt5-shellscripts\Terminal
+QN	0	07:41:23.967	Terminal	launched with C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini
+PN	0	07:41:23.994	Compiler	full recompilation has been started
+MG	2	07:41:26.381	Tester	tester not started because the account is not specified
+CL	2	07:41:26.381	Terminal	tester didn't start
+OI	0	07:41:27.410	Terminal	exit with code -1000012353
+EO	0	07:41:28.589	Terminal	stopped with 0
+JS	0	07:41:28.698	Terminal	shutdown with -1000012353 (tester not started because the account is not specified)
+EP	0	07:42:58.188	Startup	successfully initialized from start config "C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini"
+MN	0	07:42:58.210	Terminal	Dukascopy MetaTrader 5 x64 build 5472 started for Dukascopy Bank SA
+RO	0	07:42:58.211	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 32 / 63 Gb memory, 2310 / 3814 Gb disk, UAC, GMT-3
+RO	0	07:42:58.211	Terminal	C:\mql\mt5-shellscripts\Terminal
+DJ	0	07:42:58.211	Terminal	launched with C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini
+PR	0	07:42:58.212	Compiler	full recompilation has been started
+JK	2	07:43:01.208	Tester	tester not started because the account is not specified
+PI	2	07:43:01.208	Terminal	tester didn't start
+QD	0	07:43:02.796	Terminal	exit with code -1000012353
+EP	0	07:43:02.855	Terminal	stopped with 0
+NF	0	07:43:02.957	Terminal	shutdown with -1000012353 (tester not started because the account is not specified)
+QE	0	07:45:54.826	Startup	successfully initialized from start config "C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini"
+GK	0	07:45:54.840	Terminal	Dukascopy MetaTrader 5 x64 build 5472 started for Dukascopy Bank SA
+CR	0	07:45:54.840	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 32 / 63 Gb memory, 2310 / 3814 Gb disk, UAC, GMT-3
+CS	0	07:45:54.840	Terminal	C:\mql\mt5-shellscripts\Terminal
+MG	0	07:45:54.840	Terminal	launched with C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini
+OG	0	07:45:54.841	Compiler	full recompilation has been started
+PN	2	07:45:56.828	Tester	tester not started because the account is not specified
+RE	2	07:45:56.828	Terminal	tester didn't start
+DP	0	07:45:57.953	Terminal	exit with code -1000012353
+HD	0	07:45:58.048	Terminal	stopped with 0
+OM	0	07:45:58.164	Terminal	shutdown with -1000012353 (tester not started because the account is not specified)
+HJ	0	07:47:57.044	Startup	successfully initialized from start config "C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini"
+ED	0	07:47:57.058	Terminal	Dukascopy MetaTrader 5 x64 build 5472 started for Dukascopy Bank SA
+QE	0	07:47:57.058	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 32 / 63 Gb memory, 2309 / 3814 Gb disk, UAC, GMT-3
+QH	0	07:47:57.058	Terminal	C:\mql\mt5-shellscripts\Terminal
+CS	0	07:47:57.058	Terminal	launched with C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini
+JL	0	07:47:57.058	Compiler	full recompilation has been started
+CE	2	07:47:58.900	Tester	tester not started because the account is not specified
+ER	2	07:47:58.900	Terminal	tester didn't start
+FK	0	07:48:00.495	Terminal	exit with code -1000012353
+MI	0	07:48:00.580	Terminal	stopped with 0
+OQ	0	07:48:00.696	Terminal	shutdown with -1000012353 (tester not started because the account is not specified)
+IN	0	08:09:18.531	Startup	successfully initialized from start config "C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini"
+RP	0	08:09:18.545	Terminal	Dukascopy MetaTrader 5 x64 build 5472 started for Dukascopy Bank SA
+HI	0	08:09:18.545	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 34 / 63 Gb memory, 2309 / 3814 Gb disk, UAC, GMT-3
+FL	0	08:09:18.545	Terminal	C:\mql\mt5-shellscripts\Terminal
+DH	0	08:09:18.545	Terminal	launched with C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini
+QP	0	08:09:18.545	Compiler	full recompilation has been started
+IH	0	08:09:18.664	HistoryCenter	delete old files from C:\mql\mt5-shellscripts\Terminal\bases\Dukascopy-demo-mt5-1\history\EURUSD, last access time 2023.06.08 10:59
+ML	0	08:09:18.674	HistoryCenter	delete old files from C:\mql\mt5-shellscripts\Terminal\bases\Dukascopy-demo-mt5-1\history\GBPUSD, last access time 2023.06.08 10:59
+PR	0	08:09:18.682	HistoryCenter	delete old files from C:\mql\mt5-shellscripts\Terminal\bases\Dukascopy-demo-mt5-1\history\USDCHF, last access time 2023.06.08 10:59
+MF	0	08:09:18.690	HistoryCenter	delete old files from C:\mql\mt5-shellscripts\Terminal\bases\Dukascopy-demo-mt5-1\history\USDJPY, last access time 2023.06.08 10:59
+OG	2	08:09:31.820	Network	'86013097': no connection to Dukascopy-demo-mt5-1
+NE	0	08:09:45.505	Compiler	full recompilation has been finished:  113 file(s) compiled
+PS	0	08:10:03.053	Network	'86013097': authorized on Dukascopy-demo-mt5-1 through Access Point 5
+HO	0	08:10:05.992	Network	'86013097': terminal synchronized with Dukascopy Bank SA: 0 positions, 0 orders, 418 symbols, 0 spreads
+LN	0	08:10:05.992	Network	'86013097': trading has been enabled - hedging mode
+MG	0	08:10:06.312	Tester	automatical testing started
+MR	0	08:10:06.537	AutoTesting	EURUSD: preliminary downloading of M1 history started
+EF	0	08:10:07.585	Network	'86013097': scanning network for access points
+LN	0	08:10:09.347	AutoTesting	EURUSD: 23% history downloaded
+GF	0	08:10:10.654	AutoTesting	EURUSD: 34% history downloaded
+DN	0	08:10:11.194	AutoTesting	EURUSD: 40% history downloaded
+EF	0	08:10:12.391	AutoTesting	EURUSD: 52% history downloaded
+PQ	0	08:10:13.369	AutoTesting	EURUSD: 64% history downloaded
+LI	0	08:10:14.568	AutoTesting	EURUSD: 75% history downloaded
+NQ	0	08:10:16.963	AutoTesting	EURUSD: 81% history downloaded
+
+tester log: (none)
+
+data file: (none)
+
+screenshot: (none)
+

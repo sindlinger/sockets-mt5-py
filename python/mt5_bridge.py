@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Mini-SDK do Python-Bridge.
+Mini-SDK do PyOutService (pyout).
 
 Uso:
   - Adicione novos comandos registrando funções no REGISTRY.

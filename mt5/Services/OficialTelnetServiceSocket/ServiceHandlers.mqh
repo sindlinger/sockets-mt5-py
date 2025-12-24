@@ -1043,13 +1043,8 @@ bool H_ObjCreate(string &p[], string &m, string &d[])
 
 bool H_Screenshot(string &p[], string &m, string &d[])
 {
-  if(ArraySize(p)<3){ m="params"; return false; }
-  string sym=p[0]; ENUM_TIMEFRAMES tf=TfFromString(p[1]); string file=p[2];
-  int w=(ArraySize(p)>=4)?(int)StringToInteger(p[3]):0;
-  int h=(ArraySize(p)>=5)?(int)StringToInteger(p[4]):0;
-  long cid=ChartOpen(sym, tf); if(cid==0){ m="ChartOpen"; return false; }
-  if(!ChartScreenShot(cid, file, w, h)) { m="screenshot fail"; return false; }
-  m="screenshot saved"; return true;
+  m="screenshot disabled";
+  return true;
 }
 
 bool H_DropInfo(string &p[], string &m, string &d[])
@@ -1063,23 +1058,8 @@ bool H_DropInfo(string &p[], string &m, string &d[])
 
 bool H_ScreenshotSweep(string &p[], string &m, string &d[])
 {
-  // params: symbol, period, folder, base, steps, shift, align, width, height, fmt, delay
-  if(ArraySize(p)<11){ m="params"; return false; }
-  string sym=p[0]; ENUM_TIMEFRAMES tf=TfFromString(p[1]); string folder=p[2]; string base=p[3];
-  int steps=(int)StringToInteger(p[4]); int shift=(int)StringToInteger(p[5]); string align=p[6];
-  int width=(int)StringToInteger(p[7]); int height=(int)StringToInteger(p[8]); string fmt=p[9]; int delay=(int)StringToInteger(p[10]);
-  long cid=ChartOpen(sym, tf); if(cid==0){ m="ChartOpen"; return false; }
-  string align_l=align; StringToLower(align_l);
-  bool left = (align_l=="left");
-  for(int i=1;i<=steps;i++)
-  {
-    if(left) ChartNavigate(cid, CHART_BEGIN, shift);
-    else     ChartNavigate(cid, CHART_CURRENT_POS, -shift);
-    string fname=folder+"\\"+base+"-"+IntegerToString(i,3)+"."+fmt;
-    ChartScreenShot(cid, fname, width, height);
-    Sleep(delay);
-  }
-  m="sweep"; return true;
+  m="screenshot disabled";
+  return true;
 }
 
 bool H_DetachEA(string &p[], string &m, string &d[])

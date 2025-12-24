@@ -1,0 +1,30 @@
+run
+root=/mnt/c/mql/mt5-shellscripts/Terminal
+exe=/mnt/c/mql/mt5-shellscripts/Terminal/terminal64.exe
+ini=/mnt/c/mql/mt5-shellscripts/Terminal/cmdmt_tester.ini
+start_ts=1766475466.4379067
+
+terminal log: /mnt/c/mql/mt5-shellscripts/Terminal/Logs/20251223.log
+PD	0	04:37:47.030	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 31 / 63 Gb memory, 2304 / 3814 Gb disk, UAC, GMT-3
+NI	0	04:37:47.030	Terminal	C:\mql\mt5-shellscripts\Terminal
+MS	0	04:37:47.030	Terminal	launched with C:\mql\mt5-shellscripts\Terminal\cmdmt_tester.ini
+GL	2	04:37:49.329	Tester	no expert specified in the start config
+DI	2	04:37:49.329	Terminal	tester didn't start
+KH	0	04:37:49.428	MQL5	2 inputs read from script 'CmdmtPreDownload' set file "C:\mql\mt5-shellscripts\Terminal\MQL5\Presets\CmdmtPreDownload.set"
+FR	0	04:37:49.431	Scripts	script CmdmtPreDownload (EURUSD,H1) loaded successfully
+RI	0	04:37:49.436	Scripts	script CmdmtPreDownload (EURUSD,H1) closes terminal with code 1
+OP	0	04:37:49.436	Scripts	script CmdmtPreDownload (EURUSD,H1) removed
+CM	0	04:37:50.128	Network	'86013097': authorized on Dukascopy-demo-mt5-1 through mt5-demoas-1
+FF	0	04:37:50.128	Network	'86013097': previous successful authorization performed from 177.37.141.253 on 2025.12.23 00:28:27
+II	0	04:37:50.370	Terminal	exit with code 1
+QR	0	04:37:50.373	Network	'86013097': disconnected from Dukascopy-demo-mt5-1
+QE	0	04:37:50.407	Terminal	stopped with 0
+PP	0	04:37:50.512	Terminal	shutdown with 1
+
+tester log: /mnt/c/mql/mt5-shellscripts/Terminal/Tester/Logs/20251223.log
+KN	0	04:37:48.575	Tester	Local network farm switched off
+CS	0	04:37:48.575	Tester	Cloud servers switched off
+KJ	2	04:37:49.329	Tester	no expert specified in the start config
+
+data file: (none)
+

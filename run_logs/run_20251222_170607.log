@@ -1,0 +1,111 @@
+run
+root=/mnt/c/mql/mt5-shellscripts/Terminal
+exe=/mnt/c/mql/mt5-shellscripts/Terminal/terminal64.exe
+ini=/mnt/c/mql/mt5-shellscripts/Terminal/cmdmt_tester.ini
+start_ts=1766433914.3769045
+
+terminal log: /mnt/c/mql/mt5-shellscripts/Terminal/Logs/20251222.log
+NL	0	12:11:29.035	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 36 / 63 Gb memory, 2307 / 3814 Gb disk, UAC, GMT-3
+DQ	0	12:11:29.035	Terminal	C:\mql\mt5-shellscripts\Terminal
+KK	0	12:11:29.035	Terminal	launched with C:\mql\mt5-shellscripts\Terminal\cmdmt_tester.ini
+IE	2	12:11:31.219	Tester	no expert specified in the start config
+NQ	2	12:11:31.219	Terminal	tester didn't start
+PP	0	12:11:31.366	MQL5	2 inputs read from script 'CmdmtPreDownload' set file "C:\mql\mt5-shellscripts\Terminal\MQL5\Presets\CmdmtPreDownload.set"
+LJ	0	12:11:31.369	Scripts	script CmdmtPreDownload (EURUSD,H1) loaded successfully
+HN	2	12:11:31.463	Scripts	initializing of CmdmtPreDownload (EURUSD,H1) failed with code 0
+KE	0	12:11:31.463	Scripts	script CmdmtPreDownload (EURUSD,H1) closes terminal with code 0
+QE	0	12:11:31.463	Scripts	script CmdmtPreDownload (EURUSD,H1) removed
+JQ	0	12:11:32.254	Terminal	exit with code 0
+OG	0	12:11:33.773	Terminal	stopped with 0
+IF	0	12:11:33.879	Terminal	shutdown with 0
+NN	0	12:11:34.599	Startup	successfully initialized from start config "C:\mql\mt5-shellscripts\Terminal\cmdmt_tester.ini"
+JQ	0	12:11:34.628	Terminal	Dukascopy MetaTrader 5 x64 build 5472 started for Dukascopy Bank SA
+DH	0	12:11:34.628	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 36 / 63 Gb memory, 2307 / 3814 Gb disk, UAC, GMT-3
+FM	0	12:11:34.628	Terminal	C:\mql\mt5-shellscripts\Terminal
+EG	0	12:11:34.628	Terminal	launched with C:\mql\mt5-shellscripts\Terminal\cmdmt_tester.ini
+FN	2	12:12:22.661	Tester	not synchronized with trade server
+NI	2	12:12:24.256	Tester	tester not started because terminal is not synchronized with the trade server [connect status 1, 100]
+HD	2	12:12:24.256	Terminal	tester didn't start
+RQ	0	12:12:25.468	Terminal	exit with code -1000012362
+RG	0	12:12:27.035	Terminal	stopped with 0
+DF	0	12:12:27.036	Terminal	shutdown with -1000012362 (tester not synchronized with trade server)
+IH	0	17:05:06.959	Startup	successfully initialized from start config "C:\mql\mt5-shellscripts\Terminal\cmdmt_tester.ini"
+IH	0	17:05:08.350	Terminal	Dukascopy MetaTrader 5 x64 build 5472 started for Dukascopy Bank SA
+GQ	0	17:05:08.350	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 33 / 63 Gb memory, 2306 / 3814 Gb disk, UAC, GMT-3
+MD	0	17:05:08.350	Terminal	C:\mql\mt5-shellscripts\Terminal
+FN	0	17:05:08.350	Terminal	launched with C:\mql\mt5-shellscripts\Terminal\cmdmt_tester.ini
+PG	2	17:05:10.039	Tester	no expert specified in the start config
+CS	2	17:05:10.039	Terminal	tester didn't start
+CF	0	17:05:10.126	MQL5	2 inputs read from script 'CmdmtPreDownload' set file "C:\mql\mt5-shellscripts\Terminal\MQL5\Presets\CmdmtPreDownload.set"
+OG	0	17:05:10.130	Scripts	script CmdmtPreDownload (EURUSD,H1) loaded successfully
+ML	2	17:05:10.225	Scripts	initializing of CmdmtPreDownload (EURUSD,H1) failed with code 0
+HS	0	17:05:10.227	Scripts	script CmdmtPreDownload (EURUSD,H1) closes terminal with code 0
+FJ	0	17:05:10.227	Scripts	script CmdmtPreDownload (EURUSD,H1) removed
+QL	0	17:05:11.416	Terminal	exit with code 0
+CE	0	17:05:12.848	Terminal	stopped with 0
+CQ	0	17:05:12.957	Terminal	shutdown with 0
+NL	0	17:05:14.249	Startup	successfully initialized from start config "C:\mql\mt5-shellscripts\Terminal\cmdmt_tester.ini"
+MO	0	17:05:14.281	Terminal	Dukascopy MetaTrader 5 x64 build 5472 started for Dukascopy Bank SA
+NN	0	17:05:14.282	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 33 / 63 Gb memory, 2306 / 3814 Gb disk, UAC, GMT-3
+PP	0	17:05:14.282	Terminal	C:\mql\mt5-shellscripts\Terminal
+OE	0	17:05:14.282	Terminal	launched with C:\mql\mt5-shellscripts\Terminal\cmdmt_tester.ini
+KM	2	17:06:02.527	Tester	not synchronized with trade server
+LK	2	17:06:04.108	Tester	tester not started because terminal is not synchronized with the trade server [connect status 1, 100]
+JF	2	17:06:04.108	Terminal	tester didn't start
+JO	0	17:06:05.329	Terminal	exit with code -1000012362
+OE	0	17:06:07.492	Terminal	stopped with 0
+CQ	0	17:06:07.493	Terminal	shutdown with -1000012362 (tester not synchronized with trade server)
+
+tester log: /mnt/c/mql/mt5-shellscripts/Terminal/Tester/Logs/20251222.log
+KN	0	05:46:37.901	Tester	Local network farm switched off
+CS	0	05:46:37.901	Tester	Cloud servers switched off
+EK	2	05:46:38.480	Tester	tester not started because the account is not specified
+NF	0	05:47:35.086	Tester	Local network farm switched off
+NK	0	05:47:35.086	Tester	Cloud servers switched off
+OS	2	05:47:35.815	Tester	tester not started because the account is not specified
+NN	0	11:37:26.815	Tester	Local network farm switched off
+NS	0	11:37:26.815	Tester	Cloud servers switched off
+JK	2	11:37:27.671	Tester	tester not started because the account is not specified
+NF	0	11:41:46.104	Tester	Local network farm switched off
+FK	0	11:41:46.104	Tester	Cloud servers switched off
+PR	2	11:41:46.706	Tester	no expert specified in the start config
+PH	0	11:41:51.896	Tester	Local network farm switched off
+HQ	0	11:41:51.896	Tester	Cloud servers switched off
+NF	2	11:42:38.891	Tester	not synchronized with trade server
+IR	2	11:42:38.891	Tester	cannot select symbol in market watch
+MG	0	11:42:38.936	Tester	"IndicatorStub.ex5" X64
+OL	0	11:47:34.782	Tester	Local network farm switched off
+OE	0	11:47:34.782	Tester	Cloud servers switched off
+RL	2	11:47:35.489	Tester	no expert specified in the start config
+LF	0	11:47:40.876	Tester	Local network farm switched off
+KK	0	11:47:40.877	Tester	Cloud servers switched off
+KL	2	11:48:29.014	Tester	not synchronized with trade server
+HK	2	11:48:29.014	Tester	cannot select symbol in market watch
+JN	0	11:48:29.043	Tester	"IndicatorStub.ex5" X64
+CJ	0	12:06:22.598	Tester	Local network farm switched off
+KO	0	12:06:22.598	Tester	Cloud servers switched off
+LE	2	12:06:23.259	Tester	no expert specified in the start config
+FL	0	12:06:28.249	Tester	Local network farm switched off
+NE	0	12:06:28.249	Tester	Cloud servers switched off
+NR	2	12:07:15.656	Tester	not synchronized with trade server
+IQ	2	12:07:15.656	Tester	cannot select symbol in market watch
+OD	0	12:07:15.690	Tester	"IndicatorStub.ex5" X64
+FS	0	12:11:30.439	Tester	Local network farm switched off
+FI	0	12:11:30.439	Tester	Cloud servers switched off
+OO	2	12:11:31.219	Tester	no expert specified in the start config
+NE	0	12:11:35.771	Tester	Local network farm switched off
+NO	0	12:11:35.771	Tester	Cloud servers switched off
+FK	2	12:12:22.661	Tester	not synchronized with trade server
+QO	2	12:12:22.661	Tester	cannot select symbol in market watch
+NJ	0	12:12:22.703	Tester	"IndicatorStub.ex5" X64
+JI	0	17:05:09.499	Tester	Local network farm switched off
+RR	0	17:05:09.499	Tester	Cloud servers switched off
+FI	2	17:05:10.039	Tester	no expert specified in the start config
+NS	0	17:05:15.430	Tester	Local network farm switched off
+FH	0	17:05:15.430	Tester	Cloud servers switched off
+GQ	2	17:06:02.527	Tester	not synchronized with trade server
+LE	2	17:06:02.527	Tester	cannot select symbol in market watch
+RP	0	17:06:02.556	Tester	"IndicatorStub.ex5" X64
+
+data file: (none)
+

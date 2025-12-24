@@ -1,0 +1,101 @@
+run
+root=/mnt/c/mql/mt5-shellscripts/Terminal
+exe=/mnt/c/mql/mt5-shellscripts/Terminal/terminal64.exe
+ini=/mnt/c/mql/mt5-shellscripts/Terminal/cmdmt_tester.ini
+start_ts=1766540859.7930672
+
+terminal log: /mnt/c/mql/mt5-shellscripts/Terminal/Logs/20251223.log
+FO	0	22:47:43.857	Network	'86013097': terminal synchronized with Dukascopy Bank SA: 0 positions, 0 orders, 418 symbols, 0 spreads
+FN	0	22:47:43.857	Network	'86013097': trading has been enabled - hedging mode
+PG	0	22:47:44.126	Tester	automatical testing started
+LQ	0	22:47:45.091	Tester	last test passed with result "successfully finished" in 0:00:00.161
+QG	0	22:47:46.067	Terminal	exit with code 0
+MQ	0	22:47:46.069	Network	'86013097': disconnected from Dukascopy-demo-mt5-1
+HJ	0	22:47:46.105	Terminal	stopped with 0
+IQ	0	22:47:46.220	Terminal	shutdown with 0
+
+mql5 log: /mnt/c/mql/mt5-shellscripts/Terminal/MQL5/Logs/20251223.log
+ME	0	04:40:30.963	CmdmtPreDownload (EURUSD,H1)	[CmdmtPreDownload] attempt=1 copied=48 err=0
+RQ	0	04:43:34.730	CmdmtPreDownload (EURUSD,H1)	[CmdmtPreDownload] attempt=1 copied=48 err=0
+GN	0	04:47:46.577	CmdmtPreDownload (EURUSD,H1)	[CmdmtPreDownload] attempt=1 copied=144 err=0
+NK	0	04:49:40.358	CmdmtPreDownload (EURUSD,H1)	[CmdmtPreDownload] attempt=1 copied=144 err=0
+LG	0	04:52:26.741	CmdmtPreDownload (EURUSD,H1)	[CmdmtPreDownload] attempt=1 copied=144 err=0
+KS	0	05:01:05.382	CmdmtPreDownload (EURUSD,H1)	[CmdmtPreDownload] attempt=1 copied=144 err=0
+KO	0	21:37:31.977	CmdmtPreDownload (EURUSD,M1)	[CmdmtPreDownload] attempt=1 copied=10207 err=0
+JK	0	21:51:32.730	CmdmtPreDownload (EURUSD,M1)	[CmdmtPreDownload] attempt=1 copied=50000 err=0
+
+tester log: /mnt/c/mql/mt5-shellscripts/Terminal/Tester/Logs/20251223.log
+HN	0	22:47:45.081	Core 01	2025.10.24 00:00:00   [IndicatorStub] Buffers salvos em cmdmt_buffers.txt
+NN	0	22:47:45.081	Core 01	final balance 10000.00 USD
+EE	0	22:47:45.081	Core 01	EURUSD,H1: 1857947 ticks, 1008 bars generated. Environment synchronized in 0:00:00.018. Test passed in 0:00:00.161 (including ticks preprocessing 0:00:00.031).
+JF	0	22:47:45.081	Core 01	EURUSD,H1: total time from login to stop testing 0:00:00.179 (including 0:00:00.018 for history data synchronization)
+LP	0	22:47:45.081	Core 01	83 Mb memory used including 0.94 Mb of history data, 64 Mb of tick data
+QK	0	22:47:45.081	Core 01	log file "C:\mql\mt5-shellscripts\Terminal\Tester\Agent-127.0.0.1-3001\logs\20251223.log" written
+IG	0	22:47:45.091	Tester	automatical testing finished
+RN	0	22:47:45.091	Core 01	connection closed
+
+erros:
+FD	0	04:49:41.562	Terminal	shutdown with 1
+RG	0	04:52:04.504	Terminal	shutdown with 0
+KQ	2	04:52:26.624	Tester	no expert specified in the start config
+HE	2	04:52:26.624	Terminal	tester didn't start
+DG	0	04:52:27.791	Terminal	shutdown with 1
+JN	0	04:59:48.736	Terminal	shutdown with 0
+PH	2	05:01:04.479	Tester	no expert specified in the start config
+CL	2	05:01:04.479	Terminal	tester didn't start
+CN	0	05:01:06.345	Terminal	shutdown with 1
+PI	0	05:01:13.178	Terminal	shutdown with 0
+OK	2	21:37:30.579	Tester	no expert specified in the start config
+LH	2	21:37:30.579	Terminal	tester didn't start
+FI	0	21:37:33.145	Terminal	shutdown with 1
+DN	0	21:37:39.313	Terminal	shutdown with 0
+KH	2	21:42:41.245	Tester	no expert specified in the start config
+PL	2	21:42:41.245	Terminal	tester didn't start
+PI	0	21:42:42.834	Terminal	shutdown with -1000012354 (tester no expert specified in the start config)
+JF	0	21:47:19.268	Terminal	shutdown with 0
+JP	2	21:51:31.461	Tester	no expert specified in the start config
+EE	2	21:51:31.461	Terminal	tester didn't start
+KF	0	21:51:33.841	Terminal	shutdown with 1
+CM	0	21:59:52.108	Terminal	shutdown with 0
+MG	2	22:00:02.593	Tester	no expert specified in the start config
+JS	2	22:00:02.593	Terminal	tester didn't start
+JI	0	22:00:03.966	Terminal	shutdown with -1000012354 (tester no expert specified in the start config)
+JI	0	22:00:09.951	Terminal	shutdown with 0
+QK	2	22:42:58.127	Tester	no expert specified in the start config
+NH	2	22:42:58.127	Terminal	tester didn't start
+FM	0	22:42:59.666	Terminal	shutdown with -1000012354 (tester no expert specified in the start config)
+GE	0	22:43:06.550	Terminal	shutdown with 0
+PO	2	22:47:37.786	Tester	no expert specified in the start config
+KD	2	22:47:37.786	Terminal	tester didn't start
+LQ	0	22:47:39.559	Terminal	shutdown with -1000012354 (tester no expert specified in the start config)
+IQ	0	22:47:46.220	Terminal	shutdown with 0
+ML	2	21:37:30.579	Tester	no expert specified in the start config
+IS	2	21:42:41.245	Tester	no expert specified in the start config
+DO	2	21:51:31.461	Tester	no expert specified in the start config
+OM	3	21:51:38.477	Tester	EURUSD: no history data from 2025.10.24 00:00 to 2025.12.23 00:00
+IE	2	22:00:02.593	Tester	no expert specified in the start config
+QE	2	22:42:58.127	Tester	no expert specified in the start config
+FE	2	22:47:37.786	Tester	no expert specified in the start config
+
+buffers em 20251223.log
+NO	0	21:42:48.146	Core 01	2025.12.16 00:00:00   [IndicatorStub] Buffers salvos em cmdmt_buffers.txt
+JM	0	22:00:08.913	Core 01	2025.10.24 00:00:00   [IndicatorStub] Buffers salvos em cmdmt_buffers.txt
+JN	0	22:43:05.160	Core 01	2025.10.24 00:00:00   [IndicatorStub] Buffers salvos em cmdmt_buffers.txt
+HN	0	22:47:45.081	Core 01	2025.10.24 00:00:00   [IndicatorStub] Buffers salvos em cmdmt_buffers.txt
+
+data file: /mnt/c/mql/mt5-shellscripts/Terminal/Tester/Agent-127.0.0.1-3001/MQL5/Files/cmdmt_buffers.txt
+SymbolEURUSDPeriodPERIOD_H1
+IndicatorZigZag
+--- DATA WINDOW (shift=0) ---
+buffer0value0.00000000
+buffer1value0.00000000
+buffer2value0.00000000
+buffer3value0.00000000
+buffer4value0.00000000
+--- BUFFERS (last values) ---
+buffer 0: 0.00000000 0.00000000 1.16200000 0.00000000 0.00000000
+buffer 1: 0.00000000 0.00000000 0.00000000 0.00000000 0.00000000
+buffer 2: 0.00000000 0.00000000 0.00000000 0.00000000 0.00000000
+buffer 3: 0.00000000 0.00000000 1.16200000 0.00000000 0.00000000
+buffer 4: 0.00000000 0.00000000 0.00000000 0.00000000 0.00000000
+

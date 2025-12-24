@@ -6,12 +6,12 @@ Objetivo: iniciar um servico do MT5 **com um unico comando**, via UI automation.
 
 WSL:
 ```
-scripts/mt5_start_service.sh OficialTelnetServicePySocket
+scripts/mt5_start_service.sh OficialTelnetServicePySocket  # PyInService / pyin
 ```
 
 PowerShell direto:
 ```
-C:\mql\mt5-shellscripts\sockets-python\scripts\mt5_start_service.ps1 -ServiceName "OficialTelnetServicePySocket"
+C:\mql\mt5-shellscripts\sockets-python\scripts\mt5_start_service.ps1 -ServiceName "OficialTelnetServicePySocket"  # PyInService / pyin
 ```
 
 Esse comando faz o fluxo completo:
@@ -49,4 +49,3 @@ START_KEY=i \
 - `scripts/mt5_focus_check.ps1` -> confirma se o MT5 ficou em primeiro plano.
 - `scripts/mt5_ui_scan.ps1` -> lista janelas e panes (descobrir titulo/labels).
 - `scripts/mt5_nav_items.ps1` -> lista itens do Navigator (para achar nome correto).
-

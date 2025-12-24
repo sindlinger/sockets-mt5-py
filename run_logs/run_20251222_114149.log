@@ -1,0 +1,74 @@
+run
+root=/mnt/c/mql/mt5-shellscripts/Terminal
+exe=/mnt/c/mql/mt5-shellscripts/Terminal/terminal64.exe
+ini=/mnt/c/mql/mt5-shellscripts/sockets-python/cmdmt_tester.ini
+start_ts=1766414504.6362355
+
+terminal log: /mnt/c/mql/mt5-shellscripts/Terminal/Logs/20251222.log
+IO	2	05:46:38.480	Tester	tester not started because the account is not specified
+OD	2	05:46:38.480	Terminal	tester didn't start
+HQ	0	05:46:39.723	Terminal	exit with code -1000012353
+IG	0	05:46:39.757	Terminal	stopped with 0
+FK	0	05:46:39.868	Terminal	shutdown with -1000012353 (tester not started because the account is not specified)
+RH	0	05:47:33.655	Startup	successfully initialized from start config "C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini"
+KF	0	05:47:33.685	Terminal	Dukascopy MetaTrader 5 x64 build 5472 started for Dukascopy Bank SA
+NG	0	05:47:33.686	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 31 / 63 Gb memory, 2306 / 3814 Gb disk, UAC, GMT-3
+RG	0	05:47:33.686	Terminal	C:\mql\mt5-shellscripts\Terminal
+DR	0	05:47:33.686	Terminal	launched with C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini
+CK	2	05:47:35.815	Tester	tester not started because the account is not specified
+MI	2	05:47:35.815	Terminal	tester didn't start
+ED	0	05:47:37.307	Terminal	exit with code -1000012353
+QP	0	05:47:37.334	Terminal	stopped with 0
+DF	0	05:47:37.441	Terminal	shutdown with -1000012353 (tester not started because the account is not specified)
+IE	0	05:51:41.304	Startup	successfully initialized from start config "C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini"
+KK	0	05:51:41.333	Terminal	Dukascopy MetaTrader 5 x64 build 5472 started for Dukascopy Bank SA
+OR	0	05:51:41.333	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 35 / 63 Gb memory, 2306 / 3814 Gb disk, UAC, GMT-3
+OS	0	05:51:41.333	Terminal	C:\mql\mt5-shellscripts\Terminal
+IG	0	05:51:41.333	Terminal	launched with C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini
+OG	0	11:37:23.938	Startup	successfully initialized from start config "C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini"
+II	0	11:37:25.242	Terminal	Dukascopy MetaTrader 5 x64 build 5472 started for Dukascopy Bank SA
+FP	0	11:37:25.242	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 34 / 63 Gb memory, 2306 / 3814 Gb disk, UAC, GMT-3
+ME	0	11:37:25.242	Terminal	C:\mql\mt5-shellscripts\Terminal
+GQ	0	11:37:25.242	Terminal	launched with C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini
+LH	2	11:37:27.671	Tester	tester not started because the account is not specified
+NO	2	11:37:27.671	Terminal	tester didn't start
+EF	0	11:37:28.884	Terminal	exit with code -1000012353
+NR	0	11:37:28.908	Terminal	stopped with 0
+KG	0	11:37:29.010	Terminal	shutdown with -1000012353 (tester not started because the account is not specified)
+LD	0	11:41:04.922	Startup	successfully initialized from start config "C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini"
+QJ	0	11:41:04.958	Terminal	Dukascopy MetaTrader 5 x64 build 5472 started for Dukascopy Bank SA
+OS	0	11:41:04.958	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 33 / 63 Gb memory, 2306 / 3814 Gb disk, UAC, GMT-3
+ER	0	11:41:04.958	Terminal	C:\mql\mt5-shellscripts\Terminal
+CF	0	11:41:04.958	Terminal	launched with C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini
+JF	0	11:41:44.894	Startup	successfully initialized from start config "C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini"
+CH	0	11:41:44.923	Terminal	Dukascopy MetaTrader 5 x64 build 5472 started for Dukascopy Bank SA
+HQ	0	11:41:44.924	Terminal	Windows 11 build 26100, 24 x 12th Gen Intel Core i9-12900KF, AVX2, 33 / 63 Gb memory, 2306 / 3814 Gb disk, UAC, GMT-3
+FD	0	11:41:44.924	Terminal	C:\mql\mt5-shellscripts\Terminal
+PP	0	11:41:44.924	Terminal	launched with C:\mql\mt5-shellscripts\sockets-python\cmdmt_tester.ini
+PH	2	11:41:46.706	Tester	no expert specified in the start config
+KL	2	11:41:46.706	Terminal	tester didn't start
+HE	0	11:41:46.838	MQL5	2 inputs read from script 'CmdmtPreDownload' set file "C:\mql\mt5-shellscripts\Terminal\MQL5\Presets\CmdmtPreDownload.set"
+JF	0	11:41:46.842	Scripts	script CmdmtPreDownload (EURUSD,H1) loaded successfully
+LM	2	11:41:46.915	Scripts	initializing of CmdmtPreDownload (EURUSD,H1) failed with code 0
+NP	0	11:41:46.916	Scripts	script CmdmtPreDownload (EURUSD,H1) closes terminal with code 0
+LI	0	11:41:46.916	Scripts	script CmdmtPreDownload (EURUSD,H1) removed
+JM	0	11:41:48.075	Terminal	exit with code 0
+DJ	0	11:41:49.649	Terminal	stopped with 0
+IR	0	11:41:49.766	Terminal	shutdown with 0
+
+tester log: /mnt/c/mql/mt5-shellscripts/Terminal/Tester/Logs/20251222.log
+KN	0	05:46:37.901	Tester	Local network farm switched off
+CS	0	05:46:37.901	Tester	Cloud servers switched off
+EK	2	05:46:38.480	Tester	tester not started because the account is not specified
+NF	0	05:47:35.086	Tester	Local network farm switched off
+NK	0	05:47:35.086	Tester	Cloud servers switched off
+OS	2	05:47:35.815	Tester	tester not started because the account is not specified
+NN	0	11:37:26.815	Tester	Local network farm switched off
+NS	0	11:37:26.815	Tester	Cloud servers switched off
+JK	2	11:37:27.671	Tester	tester not started because the account is not specified
+NF	0	11:41:46.104	Tester	Local network farm switched off
+FK	0	11:41:46.104	Tester	Cloud servers switched off
+PR	2	11:41:46.706	Tester	no expert specified in the start config
+
+data file: (none)
+
