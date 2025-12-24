@@ -38,7 +38,7 @@ Componentes
   - registry: PyMql-CodeBridge/pyout/registry.py
   - commands: PyMql-CodeBridge/pyout/commands.py
   - arrays: PyMql-CodeBridge/pyout/arrays.py
-  - wrappers legacy: python/python_bridge_server.py + python/mt5_bridge.py
+  - wrappers legacy: python/legado/python_bridge_server.py + python/legado/mt5_bridge.py
 
 Protocolos
 ----------

@@ -14,7 +14,7 @@
 - **PyMql-CodeBridge/pyout/registry.py** – registry (commands/arrays) do PyOut.
 - **PyMql-CodeBridge/pyout/commands.py** – comandos JSON (PY_CALL).
 - **PyMql-CodeBridge/pyout/arrays.py** – arrays (PY_ARRAY_CALL).
-  - wrappers legacy: `python/python_bridge_server.py` e `python/mt5_bridge.py`
+  - wrappers legacy: `python/legado/python_bridge_server.py` e `python/legado/mt5_bridge.py`
 - **scripts/mt5_bootstrap_agent.py** – agent que observa `bootstrap_request.txt`, compila e inicia serviços (UI).
 - (Legados) **test_socket.py**, **bridge_cli_interativo-mt5.py**, **mt_cli.py** – mantidos, mas o CMD MT substitui.
 
