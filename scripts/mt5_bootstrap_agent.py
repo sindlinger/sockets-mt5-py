@@ -119,7 +119,7 @@ def process_once(req_path: Path, resp_path: Path, repo_root: Path, timeout: int,
     compile_req = data.get("compile", "0").strip() == "1"
     services = parse_services(data.get("services", ""))
     if not services:
-        services = ["OficialTelnetServiceSocket", "OficialTelnetServicePySocket"]
+        services = ["OficialTelnetServiceSocket", "PyInService"]
 
     window_title = data.get("window_title") or os.environ.get("CMDMT_MT5_WINDOW") or "MetaTrader 5"
     start_key = data.get("start_key") or os.environ.get("CMDMT_MT5_START_KEY") or "i"

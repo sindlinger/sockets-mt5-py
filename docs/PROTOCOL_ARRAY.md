@@ -1,7 +1,7 @@
 Protocol: Binary frames (SEND_ARRAY / GET_ARRAY)
 
 Nota: este protocolo é servido pelo serviço MT5 **PyInService (pyin)**
-`OficialTelnetServicePySocket` (porta padrão 9091).
+`PyInService` (porta padrão 9091).
 
 Overview
 --------
@@ -52,7 +52,7 @@ Notes
 * This is NOT JSON. It is a binary frame protocol.
 * The service stores the last received array in memory and can return it.
 * See MQL5 implementation:
-  mt5/Services/OficialTelnetServicePySocket.mq5
+  mt5/Services/PyInService.mq5
 * Example client:
   examples/mt5_frames.py
 

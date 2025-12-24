@@ -10,7 +10,7 @@ Flow:
 
 Notes:
   - FFT is computed on the Python side (cuPy if available, numpy fallback).
-  - Requires MT5 service running and python/python_bridge_server.py running.
+  - Requires MT5 service running and PyMql-CodeBridge/pyout/pyout_server.py running.
 """
 
 import argparse

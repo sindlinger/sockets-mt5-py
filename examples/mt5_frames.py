@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Exemplo de uso do protocolo binário SEND_ARRAY / GET_ARRAY.
-Requer o serviço MT5 Python-only (OficialTelnetServicePySocket) escutando (porta 9091).
+Requer o serviço MT5 Python-only (PyInService) escutando (porta 9091).
 """
 
 import socket

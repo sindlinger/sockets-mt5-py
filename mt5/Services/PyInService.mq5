@@ -1,5 +1,5 @@
 //+------------------------------------------------------------------+
-//| OficialTelnetServicePySocket.mq5                                 |
+//| PyInService.mq5                                                  |
 //| PyInService (pyin): serviço TCP exclusivo para Python            |
 //| Comandos: PY_CALL / PY_ARRAY_CALL                                |
 //| Texto:  id|TYPE|p1|p2\n                                          |

@@ -269,6 +269,192 @@ def resolve_mql5_candidates(target: str, term: Path):
             hits.append(p)
     return hits
 
+def _is_blank_text_file(path: Path) -> bool:
+    if not path.exists():
+        return True
+    try:
+        data = path.read_bytes()
+    except Exception:
+        return False
+    if not data:
+        return True
+    # best-effort decode and trim
+    try:
+        txt = data.decode("utf-8", "ignore")
+    except Exception:
+        try:
+            txt = data.decode("latin-1", "ignore")
+        except Exception:
+            return False
+    return txt.strip() == ""
+
+def _rel_include_path(from_dir: Path, target: Path) -> str:
+    rel = os.path.relpath(str(target), str(from_dir))
+    return rel.replace("/", "\\")
+
+def _stfft_indicator_stub(ind_name: str, buffers: int, include_path: str) -> str:
+    if buffers < 0:
+        buffers = 0
+    colors = [
+        "clrDodgerBlue",
+        "clrOrangeRed",
+        "clrSeaGreen",
+        "clrGold",
+        "clrViolet",
+        "clrSlateBlue",
+        "clrTomato",
+        "clrDeepSkyBlue",
+    ]
+    prop = []
+    if buffers > 0:
+        prop.append(f"#property indicator_buffers {buffers}")
+        prop.append(f"#property indicator_plots   {buffers}")
+        for i in range(buffers):
+            idx = i + 1
+            color = colors[i % len(colors)]
+            prop.append(f"#property indicator_type{idx}   DRAW_LINE")
+            prop.append(f"#property indicator_color{idx}  {color}")
+            prop.append(f"#property indicator_label{idx}  \"STFFT{idx}\"")
+    else:
+        prop.append("#property indicator_buffers 0")
+        prop.append("#property indicator_plots   0")
+
+    buf_decl = []
+    buf_init = []
+    buf_clear = []
+    buf_copy = []
+    if buffers > 0:
+        for i in range(buffers):
+            idx = i + 1
+            buf_decl.append(f"double Buf{idx}[];")
+            buf_init.append(f"  SetIndexBuffer({i}, Buf{idx}, INDICATOR_DATA);")
+            buf_init.append(f"  ArraySetAsSeries(Buf{idx}, true);")
+            buf_clear.append(f"""  for(int i=0;i<clearN;i++) Buf{idx}[i]=0.0;""")
+            buf_copy.append(f"""  int off{idx} = {i} * seg;
+  int len{idx} = out_count - off{idx};
+  if(len{idx} > 0)
+  {{
+    int copyN = MathMin(len{idx}, rates_total);
+    for(int i=0;i<copyN;i++) Buf{idx}[i] = out[off{idx}+i];
+  }}""")
+
+    prop_block = "\\n".join(prop)
+    buf_decl_block = "\\n".join(buf_decl)
+    buf_init_block = "\\n".join(buf_init)
+    buf_clear_block = "\\n".join(buf_clear)
+    buf_copy_block = "\\n\\n".join(buf_copy)
+
+    return f"""//+------------------------------------------------------------------+
+//| {ind_name}.mq5
+//| Gerado por cmdmt (scaffold stfft)
+//+------------------------------------------------------------------+
+#property indicator_separate_window
+{prop_block}
+#property strict
+
+#include \"{include_path}\"
+
+input int    InpLen    = 1024;      // total de amostras enviadas
+input int    InpWin    = 256;       // janela STFT
+input int    InpHop    = 128;       // hop STFT
+input bool   InpHalf   = true;
+input bool   InpLog    = false;
+input bool   InpNorm   = false;
+input string InpWindow = \"hann\";  // hann|hamming|blackman|\"\" (none)
+input bool   InpGPU    = true;
+input bool   InpNewBarOnly = true;
+input string InpHost = \"host.docker.internal\";
+input int    InpPort = 9091;
+
+{buf_decl_block}
+static datetime last_bar = 0;
+
+string BuildStfftName()
+{{
+  string name = \"stfft\";
+  name += \"?n=\" + IntegerToString(InpWin);
+  name += \"&hop=\" + IntegerToString(InpHop);
+  name += \"&half=\" + (InpHalf?\"1\":\"0\");
+  name += \"&log=\" + (InpLog?\"1\":\"0\");
+  name += \"&norm=\" + (InpNorm?\"1\":\"0\");
+  if(InpWindow!=\"\") name += \"&win=\" + InpWindow;
+  if(InpGPU) name += \"&gpu=1\";
+  return name;
+}}
+
+int OnInit()
+{{
+{buf_init_block}
+  return INIT_SUCCEEDED;
+}}
+
+int OnCalculate(const int rates_total,
+                const int prev_calculated,
+                const datetime &time[],
+                const double &open[],
+                const double &high[],
+                const double &low[],
+                const double &close[],
+                const long &tick_volume[],
+                const long &volume[],
+                const int &spread[])
+{{
+  int n = InpLen;
+  if(n < InpWin) n = InpWin;
+  if(n < 8) n = 8;
+  if(rates_total < n) return 0;
+  if(InpNewBarOnly)
+  {{
+    if(time[0]==last_bar) return rates_total;
+    last_bar = time[0];
+  }}
+
+  double inbuf[];
+  ArrayResize(inbuf, n);
+  for(int i=0;i<n;i++) inbuf[i]=close[i];
+
+  double out[];
+  string err=\"\";
+  string func = BuildStfftName();
+  if(!PyBridgeCalcF64(inbuf, n, out, func, InpHost, InpPort, err))
+    return rates_total;
+
+  int out_count = ArraySize(out);
+  if(out_count <= 0) return rates_total;
+"""+(f"""
+  int seg = out_count / {buffers};
+  if(seg <= 0) seg = out_count;
+  int clearN = MathMin(rates_total, seg);
+
+{buf_clear_block}
+
+{buf_copy_block}
+""" if buffers > 0 else "")+"""
+  return rates_total;
+}}
+"""
+
+def _resolve_new_mq5_path(target: str, term: Path):
+    t = target.strip()
+    if not t:
+        return None
+    # Absolute or path-like
+    if "/" in t or "\\" in t or ":" in t:
+        t = t.replace("/", "\\")
+        if t.lower().startswith("mql5\\"):
+            t = t[5:]
+        p = Path(maybe_wslpath(t))
+        if not p.is_absolute():
+            p = term / "MQL5" / Path(*t.split("\\"))
+        if p.suffix.lower() != ".mq5":
+            p = p.with_suffix(".mq5")
+        return p
+    # Name only -> Indicators root
+    name = t
+    if not name.lower().endswith(".mq5"):
+        name += ".mq5"
+    return term / "MQL5" / "Indicators" / name
+
 def read_compile_log(log_path: Path):
     if not log_path.exists():
         return ""
@@ -361,7 +547,7 @@ def run_mt5_compile_pyservice():
     if not term:
         print("não encontrei o Terminal do MT5. Defina CMDMT_MT5_DATA ou MT5_DATA_DIR.")
         return False
-    svc = term / "MQL5" / "Services" / "OficialTelnetServicePySocket.mq5"
+    svc = term / "MQL5" / "Services" / "PyInService.mq5"
     if not svc.exists():
         print("serviço Python não encontrado. Informe o caminho completo.")
         return False
@@ -2120,7 +2306,8 @@ def pybridge_start():
             pid_path.unlink()
         except Exception:
             pass
-    script = Path(__file__).with_name("python_bridge_server.py")
+    base = Path(__file__).resolve().parent.parent
+    script = base / "PyMql-CodeBridge" / "pyout" / "pyout_server.py"
     cmd = [sys.executable, str(script)]
     try:
         proc = subprocess.Popen(
@@ -2631,37 +2818,172 @@ def parse_user_line(line: str, ctx):
     if head in ("tester", "mt5tester", "testermt5"):
         return "TESTER_RUN", parts[1:]
 
-    if head in ("pyservice", "pysvc", "pyserv"):
+    if head in ("python", "py"):
         if len(parts) < 2:
-            print("uso: pyservice <ping|cmd|raw|compile> [args...]"); return None
-        action = parts[1].lower()
+            print("uso: python <build|service|bridge> ...")
+            return None
+        sub = parts[1].lower()
         rest = parts[2:]
-        if action == "compile":
-            return "COMPILE_PYSERVICE", []
-        if action in ("ping","status"):
-            host, port = _parse_host_port(rest, DEFAULT_PY_SERVICE_HOSTS, DEFAULT_PY_SERVICE_PORT)
-            return "PYSERVICE_PING", [host, str(port)]
-        if action == "raw" and len(rest) >= 1:
-            return "PYSERVICE_RAW", [" ".join(rest)]
-        if action == "cmd" and len(rest) >= 1:
-            return "PYSERVICE_CMD", [rest[0].upper()] + rest[1:]
-        print("uso: pyservice <ping|cmd|raw|compile> [args...]"); return None
 
-    if head in ("pybridge", "pyb"):
+        if sub in ("service", "svc", "pyservice"):
+            if len(rest) < 1:
+                print("uso: python service <ping|cmd|raw|compile> [args...]"); return None
+            action = rest[0].lower()
+            args = rest[1:]
+            if action == "compile":
+                return "COMPILE_PYSERVICE", []
+            if action in ("ping","status"):
+                host, port = _parse_host_port(args, DEFAULT_PY_SERVICE_HOSTS, DEFAULT_PY_SERVICE_PORT)
+                return "PYSERVICE_PING", [host, str(port)]
+            if action == "raw" and len(args) >= 1:
+                return "PYSERVICE_RAW", [" ".join(args)]
+            if action == "cmd" and len(args) >= 1:
+                return "PYSERVICE_CMD", [args[0].upper()] + args[1:]
+            print("uso: python service <ping|cmd|raw|compile> [args...]"); return None
+
+        if sub in ("bridge", "pybridge"):
+            if len(rest) < 1:
+                print("uso: python bridge <start|stop|status|ping|ensure> [host] [port]"); return None
+            action = rest[0].lower()
+            args = rest[1:]
+            if action == "start":
+                return "PYBRIDGE_START", []
+            if action == "stop":
+                return "PYBRIDGE_STOP", []
+            if action == "status":
+                return "PYBRIDGE_STATUS", []
+            if action in ("ping","ensure"):
+                host, port = _parse_host_port(args, DEFAULT_PY_BRIDGE_HOSTS, DEFAULT_PY_BRIDGE_PORT)
+                return ("PYBRIDGE_ENSURE" if action=="ensure" else "PYBRIDGE_PING", [host, str(port)])
+            print("uso: python bridge <start|stop|status|ping|ensure> [host] [port]"); return None
+
+        if sub in ("build", "scaffold"):
+            if not rest:
+                print("uso: python build -i stfft [NOME] [--buffers N]"); return None
+            mode = None
+            buffers = 1
+            pos = []
+            i = 0
+            while i < len(rest):
+                tok = rest[i]
+                low = tok.lower()
+                if low in ("-i", "--indicator", "--ind"):
+                    mode = "ind"
+                    i += 1
+                    continue
+                if low in ("--buffers", "-b"):
+                    if i + 1 >= len(rest):
+                        print("uso: python build -i stfft [NOME] [--buffers N]"); return None
+                    try:
+                        buffers = int(rest[i + 1])
+                    except Exception:
+                        print("erro: --buffers requer numero"); return None
+                    i += 2
+                    continue
+                if tok.startswith("-"):
+                    print("uso: python build -i stfft [NOME] [--buffers N]"); return None
+                pos.append(tok)
+                i += 1
+            if mode != "ind":
+                print("uso: python build -i stfft [NOME] [--buffers N]"); return None
+            template = "stfft"
+            name = ""
+            if pos:
+                if pos[0].lower() in ("stfft", "stft"):
+                    template = "stfft"
+                    name = " ".join(pos[1:]).strip() or pos[0]
+                else:
+                    name = " ".join(pos).strip()
+            if template != "stfft":
+                print("erro: template desconhecido"); return None
+            if not name:
+                name = template
+            return "IND_STFFT", [name, str(buffers)]
+
+        print("uso: python <build|service|bridge> ...")
+        return None
+
+    if head in ("legacy", "leg"):
         if len(parts) < 2:
-            print("uso: pybridge <start|stop|status|ping|ensure> [host] [port]"); return None
-        action = parts[1].lower()
+            print("uso: legacy <pyservice|pybridge|ind> ...")
+            return None
+        sub = parts[1].lower()
         rest = parts[2:]
-        if action == "start":
-            return "PYBRIDGE_START", []
-        if action == "stop":
-            return "PYBRIDGE_STOP", []
-        if action == "status":
-            return "PYBRIDGE_STATUS", []
-        if action in ("ping","ensure"):
-            host, port = _parse_host_port(rest, DEFAULT_PY_BRIDGE_HOSTS, DEFAULT_PY_BRIDGE_PORT)
-            return ("PYBRIDGE_ENSURE" if action=="ensure" else "PYBRIDGE_PING", [host, str(port)])
-        print("uso: pybridge <start|stop|status|ping|ensure> [host] [port]"); return None
+
+        if sub in ("pyservice", "pysvc", "pyserv"):
+            if len(rest) < 1:
+                print("uso: legacy pyservice <ping|cmd|raw|compile> [args...]"); return None
+            action = rest[0].lower()
+            args = rest[1:]
+            if action == "compile":
+                return "COMPILE_PYSERVICE", []
+            if action in ("ping","status"):
+                host, port = _parse_host_port(args, DEFAULT_PY_SERVICE_HOSTS, DEFAULT_PY_SERVICE_PORT)
+                return "PYSERVICE_PING", [host, str(port)]
+            if action == "raw" and len(args) >= 1:
+                return "PYSERVICE_RAW", [" ".join(args)]
+            if action == "cmd" and len(args) >= 1:
+                return "PYSERVICE_CMD", [args[0].upper()] + args[1:]
+            print("uso: legacy pyservice <ping|cmd|raw|compile> [args...]"); return None
+
+        if sub in ("pybridge", "pyb"):
+            if len(rest) < 1:
+                print("uso: legacy pybridge <start|stop|status|ping|ensure> [host] [port]"); return None
+            action = rest[0].lower()
+            args = rest[1:]
+            if action == "start":
+                return "PYBRIDGE_START", []
+            if action == "stop":
+                return "PYBRIDGE_STOP", []
+            if action == "status":
+                return "PYBRIDGE_STATUS", []
+            if action in ("ping","ensure"):
+                host, port = _parse_host_port(args, DEFAULT_PY_BRIDGE_HOSTS, DEFAULT_PY_BRIDGE_PORT)
+                return ("PYBRIDGE_ENSURE" if action=="ensure" else "PYBRIDGE_PING", [host, str(port)])
+            print("uso: legacy pybridge <start|stop|status|ping|ensure> [host] [port]"); return None
+
+        if sub in ("ind", "indicator"):
+            if len(rest) < 1:
+                print("uso: legacy ind NOME -stfft [--buffers N]")
+                return None
+            mode = None
+            buffers = 1
+            name_tokens = []
+            i = 0
+            while i < len(rest):
+                tok = rest[i]
+                low = tok.lower()
+                if low in ("stfft", "stft", "-stfft", "--stfft", "-stft", "--stft"):
+                    mode = "stfft"
+                    i += 1
+                    continue
+                if low in ("--buffers", "-b"):
+                    if i + 1 >= len(rest):
+                        print("uso: legacy ind NOME -stfft [--buffers N]")
+                        return None
+                    try:
+                        buffers = int(rest[i + 1])
+                    except Exception:
+                        print("erro: --buffers requer numero")
+                        return None
+                    i += 2
+                    continue
+                if tok.startswith("-"):
+                    print("uso: legacy ind NOME -stfft [--buffers N]")
+                    return None
+                name_tokens.append(tok)
+                i += 1
+            if mode != "stfft":
+                print("uso: legacy ind NOME -stfft [--buffers N]")
+                return None
+            name = " ".join(name_tokens).strip()
+            if not name:
+                print("uso: legacy ind NOME -stfft [--buffers N]")
+                return None
+            return "IND_STFFT", [name, str(buffers)]
+
+        print("uso: legacy <pyservice|pybridge|ind> ...")
+        return None
 
     # Chart commands: "chart open symbol tf", "chart close", "chart list", "chart add ind/ea/tpl ..."
     if head == "chart":
@@ -2883,14 +3205,14 @@ def parse_user_line(line: str, ctx):
             "  py PAYLOAD                   (PY_CALL)\n"
             "  compile ARQUIVO|NOME         (compila .mq5 via MetaEditor)\n"
             "  compile here                 (compila OficialTelnetServiceSocket.mq5)\n"
-            "  compile pyservice            (compila OficialTelnetServicePySocket.mq5)\n"
+            "  compile pyservice            (compila PyInService.mq5)\n"
             "  compile all                  (compila os dois serviços)\n"
-            "  pyservice ping [HOST] [PORT] (testa serviço Python-only)\n"
-            "  pyservice cmd TYPE [PARAMS]  (envia comando direto ao 9091)\n"
-            "  pyservice raw LINE           (envia linha crua ao 9091)\n"
-            "  pybridge start|stop|status\n"
-            "  pybridge ping [HOST] [PORT]\n"
-            "  pybridge ensure [HOST] [PORT]\n"
+            "  python service <ping|cmd|raw|compile> [args...]  (PyIn 9091)\n"
+            "  python bridge <start|stop|status|ping|ensure> [host] [port]\n"
+            "  python build -i stfft [NOME] [--buffers N]\n"
+            "  legacy pyservice <ping|cmd|raw|compile> [args...]\n"
+            "  legacy pybridge <start|stop|status|ping|ensure> [host] [port]\n"
+            "  legacy ind NOME -stfft [--buffers N]\n"
             "  hotkeys                       (lista hotkeys e uso)\n"
             "  cmd+hotkeys                   (lista + exemplo)\n"
             "  hotkey save NOME \"CMD; CMD\"  (salva sequência)\n"
@@ -3779,6 +4101,31 @@ def main():
                 pybridge_start()
                 okp2, info2 = _ping_pybridge(host, port)
                 print(("OK " if okp2 else "ERROR ") + (info2 or "pybridge"))
+                return
+            if cmd_type == "IND_STFFT":
+                name = params[0] if params else ""
+                buffers = int(params[1]) if len(params) >= 2 and str(params[1]).lstrip("-").isdigit() else 1
+                term = find_terminal_data_dir()
+                if not term:
+                    print("ERROR terminal_dir (defina CMDMT_MT5_DATA)")
+                    return
+                target = _resolve_new_mq5_path(name, term)
+                if not target:
+                    print("ERROR nome inválido")
+                    return
+                svc_mqh = term / "MQL5" / "Services" / "PyInService" / "PyInBridge.mqh"
+                if not svc_mqh.exists():
+                    print("ERROR PyInBridge.mqh não encontrado")
+                    return
+                if target.exists() and not _is_blank_text_file(target):
+                    print("ERROR arquivo não está em branco (use outro nome)")
+                    return
+                target.parent.mkdir(parents=True, exist_ok=True)
+                include_rel = _rel_include_path(target.parent, svc_mqh)
+                content = _stfft_indicator_stub(target.stem, buffers, include_rel)
+                target.write_text(content, encoding="utf-8", errors="ignore", newline="\n")
+                print("OK stfft scaffold")
+                print("  " + str(target))
                 return
             if cmd_type == "RAW":
                 payload = params[0]

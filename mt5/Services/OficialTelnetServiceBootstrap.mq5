@@ -7,7 +7,7 @@
 #property strict
 
 input bool   InpCompile   = true;
-input string InpServices  = "OficialTelnetServiceSocket;OficialTelnetServicePySocket";
+input string InpServices  = "OficialTelnetServiceSocket;PyInService";
 input int    InpTimeoutSec= 120;
 input int    InpSleepMs   = 250;
 input bool   InpExitAfter = true; // one-shot

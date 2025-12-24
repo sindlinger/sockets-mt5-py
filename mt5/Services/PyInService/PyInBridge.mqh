@@ -1,6 +1,6 @@
-// PyBridge.mqh - mini SDK MQL para serviço Python (9091)
-#ifndef __PY_BRIDGE_MQH__
-#define __PY_BRIDGE_MQH__
+// PyInBridge.mqh - mini SDK MQL para serviço Python (9091)
+#ifndef __PYIN_BRIDGE_MQH__
+#define __PYIN_BRIDGE_MQH__
 
 #include "OficialTelnetServiceSocket/SocketBridge.mqh"
 

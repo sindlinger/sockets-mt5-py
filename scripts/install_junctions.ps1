@@ -36,7 +36,7 @@ if (-not (Test-Path $Mql5)) {
 
 $links = @{
   (Join-Path $Mql5 "Services\OficialTelnetServiceSocket") = (Join-Path $SourceRoot "Services\OficialTelnetServiceSocket");
-  (Join-Path $Mql5 "Services\OficialTelnetServicePySocket") = (Join-Path $SourceRoot "Services\OficialTelnetServicePySocket");
+  (Join-Path $Mql5 "Services\PyInService") = (Join-Path $SourceRoot "Services\PyInService");
   (Join-Path $Mql5 "Experts\OficialTelnetListener") = (Join-Path $SourceRoot "Experts\OficialTelnetListener");
   (Join-Path $Mql5 "Scripts\TelnetSocketScripts") = (Join-Path $SourceRoot "Scripts\TelnetSocketScripts");
   (Join-Path $Mql5 "Indicators\TelnetSocketIndicators") = (Join-Path $SourceRoot "Indicators\TelnetSocketIndicators");
@@ -92,8 +92,8 @@ if (Test-Path $svcSrc) {
   Write-Host "Serviço copiado para Services root." -ForegroundColor Green
 }
 
-$svcPySrc = Join-Path $SourceRoot "Services\\OficialTelnetServicePySocket.mq5"
-$svcPyDst = Join-Path $Mql5 "Services\\OficialTelnetServicePySocket.mq5"
+$svcPySrc = Join-Path $SourceRoot "Services\\PyInService.mq5"
+$svcPyDst = Join-Path $Mql5 "Services\\PyInService.mq5"
 if (Test-Path $svcPySrc) {
   if (Test-Path $svcPyDst) {
     $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
