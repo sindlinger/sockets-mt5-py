@@ -17,6 +17,9 @@ import socket
 import socketserver
 import sys
 import time
+import uuid
+from concurrent.futures import ThreadPoolExecutor
+import threading
 
 BASE_DIR = os.path.dirname(__file__)
 if BASE_DIR not in sys.path:
@@ -34,9 +37,85 @@ HOST = os.environ.get("PYBRIDGE_HOST", "0.0.0.0")
 PORT = int(os.environ.get("PYBRIDGE_PORT", "9100"))
 GW_HOSTS = os.environ.get("GW_HOSTS", "host.docker.internal,127.0.0.1")
 GW_PORT = int(os.environ.get("GW_PORT", "9095"))
+LOG_ENABLED = os.environ.get("PYOUT_LOG", "1").lower() not in ("0", "false", "no", "off")
+WORKERS = max(1, int(os.environ.get("PYOUT_WORKERS", "2")))
 
 # armazena ultimo array recebido
 LAST_ARRAY = {"name": "", "dtype": "", "count": 0, "data": b""}
+
+# jobs async
+JOBS: dict[str, dict] = {}
+JOBS_LOCK = threading.Lock()
+EXECUTOR = ThreadPoolExecutor(max_workers=WORKERS)
+
+
+def _process_array_job(name: str, dtype: str, count: int, payload: bytes):
+    dt = _dtype_to_numpy(dtype)
+    if dt is None or np is None:
+        return dtype, count, payload
+
+    arr = np.frombuffer(payload, dtype=dt, count=count)
+    out = reg.handle_array(name, arr, dtype)
+    if np is None:
+        out_arr = arr
+    else:
+        out_arr = np.asarray(out, dtype=dt)
+
+    out_bytes = out_arr.tobytes()
+    return dtype, len(out_arr), out_bytes
+
+
+def _jobs_cleanup(now: float, ttl: float = 120.0) -> None:
+    with JOBS_LOCK:
+        stale = [k for k, v in JOBS.items() if now - v.get("created", now) > ttl]
+        for k in stale:
+            JOBS.pop(k, None)
+
+
+def submit_job(name: str, dtype: str, count: int, payload: bytes) -> str:
+    job_id = uuid.uuid4().hex
+    fut = EXECUTOR.submit(_process_array_job, name, dtype, count, payload)
+    with JOBS_LOCK:
+        JOBS[job_id] = {
+            "future": fut,
+            "created": time.time(),
+        }
+    return job_id
+
+
+def poll_job(job_id: str):
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+    if not job:
+        return "not_found", "", 0, b"", "job_not_found"
+
+    fut = job["future"]
+    if not fut.done():
+        return "pending", "", 0, b"", ""
+
+    try:
+        dtype, out_count, out_bytes = fut.result()
+    except Exception as e:
+        with JOBS_LOCK:
+            JOBS.pop(job_id, None)
+        return "error", "", 0, b"", str(e)
+
+    with JOBS_LOCK:
+        JOBS.pop(job_id, None)
+    return "done", dtype, out_count, out_bytes, ""
+
+
+def log(msg: str) -> None:
+    if LOG_ENABLED:
+        ts = time.strftime("%Y-%m-%d %H:%M:%S")
+        print(f"[{ts}] [PyOut] {msg}", flush=True)
+
+
+def log_frame(tag: str, header_text: str) -> None:
+    if not header_text:
+        log(f"{tag} header=(empty)")
+    else:
+        log(f"{tag} header={header_text}")
 
 
 def handle_request(req: dict) -> dict:
@@ -124,13 +203,45 @@ def _dtype_to_numpy(dtype: str):
 
 
 def handle_frame(frame: bytes, header_text: str) -> bytes:
+    log_frame("RX", header_text)
     parts = header_text.split("|")
+    if len(parts) >= 6 and parts[1] == "PY_ARRAY_SUBMIT":
+        name = parts[2]
+        dtype = parts[3]
+        count = int(parts[4])
+        raw_len = int(parts[5])
+        payload = frame[-raw_len:] if raw_len > 0 else b""
+        log(f"PY_ARRAY_SUBMIT name={name} dtype={dtype} count={count} raw_len={raw_len}")
+
+        job_id = submit_job(name, dtype, count, payload)
+        resp_header = f"{parts[0]}|PY_ARRAY_ACK|{job_id}|{dtype}|0|0"
+        hb = resp_header.encode("utf-8")
+        return b"\xFF" + len(hb).to_bytes(4, "big") + hb
+
+    if len(parts) >= 6 and parts[1] == "PY_ARRAY_POLL":
+        job_id = parts[2]
+        status, dtype, out_count, out_bytes, err = poll_job(job_id)
+        if status == "pending":
+            resp_header = f"{parts[0]}|PY_ARRAY_PENDING|{job_id}|{dtype}|0|0"
+            hb = resp_header.encode("utf-8")
+            return b"\xFF" + len(hb).to_bytes(4, "big") + hb
+        if status == "done":
+            resp_header = f"{parts[0]}|PY_ARRAY_RESP|{job_id}|{dtype}|{out_count}|{len(out_bytes)}"
+            hb = resp_header.encode("utf-8")
+            return b"\xFF" + len(hb).to_bytes(4, "big") + hb + out_bytes
+
+        err_bytes = (err or "py_error").encode("utf-8")
+        resp_header = f"{parts[0]}|PY_ARRAY_ERROR|{job_id}|txt|0|{len(err_bytes)}"
+        hb = resp_header.encode("utf-8")
+        return b"\xFF" + len(hb).to_bytes(4, "big") + hb + err_bytes
+
     if len(parts) >= 6 and parts[1] == "PY_ARRAY_CALL":
         name = parts[2]
         dtype = parts[3]
         count = int(parts[4])
         raw_len = int(parts[5])
         payload = frame[-raw_len:] if raw_len > 0 else b""
+        log(f"PY_ARRAY_CALL name={name} dtype={dtype} count={count} raw_len={raw_len}")
 
         LAST_ARRAY["name"] = name
         LAST_ARRAY["dtype"] = dtype
@@ -157,6 +268,7 @@ def handle_frame(frame: bytes, header_text: str) -> bytes:
         out_bytes = out.tobytes()
         resp_header = f"{parts[0]}|PY_ARRAY_RESP|{name}|{dtype}|{len(out)}|{len(out_bytes)}"
         hb = resp_header.encode("utf-8")
+        log(f"PY_ARRAY_RESP name={name} dtype={dtype} count={len(out)} raw_len={len(out_bytes)}")
         return b"\xFF" + len(hb).to_bytes(4, "big") + hb + out_bytes
     return b""
 
@@ -199,6 +311,7 @@ def run_gateway_client():
                     line = payload.strip()
                     if not line:
                         continue
+                    log(f"RX PY_CALL json_len={len(line)}")
                     try:
                         req = json.loads(line)
                         resp = handle_request(req)
@@ -225,12 +338,61 @@ class Handler(socketserver.StreamRequestHandler):
                 hdr_len = int.from_bytes(self.rfile.read(4), "big")
                 header = self.rfile.read(hdr_len).decode("utf-8", "ignore")
                 parts = header.split("|")
+                if len(parts) >= 6 and parts[1] == "PY_ARRAY_SUBMIT":
+                    name = parts[2]
+                    dtype = parts[3]
+                    count = int(parts[4])
+                    raw_len = int(parts[5])
+                    payload = self.rfile.read(raw_len) if raw_len > 0 else b""
+                    log_frame("RX", header)
+                    log(f"PY_ARRAY_SUBMIT name={name} dtype={dtype} count={count} raw_len={raw_len}")
+
+                    job_id = submit_job(name, dtype, count, payload)
+                    resp_header = f"{parts[0]}|PY_ARRAY_ACK|{job_id}|{dtype}|0|0"
+                    hb = resp_header.encode("utf-8")
+                    frame = b"\xFF" + len(hb).to_bytes(4, "big") + hb
+                    self.wfile.write(frame)
+                    self.wfile.flush()
+                    log_frame("TX", resp_header)
+                    continue
+
+                if len(parts) >= 6 and parts[1] == "PY_ARRAY_POLL":
+                    job_id = parts[2]
+                    status, dtype, out_count, out_bytes, err = poll_job(job_id)
+                    if status == "pending":
+                        resp_header = f"{parts[0]}|PY_ARRAY_PENDING|{job_id}|{dtype}|0|0"
+                        hb = resp_header.encode("utf-8")
+                        frame = b"\xFF" + len(hb).to_bytes(4, "big") + hb
+                        self.wfile.write(frame)
+                        self.wfile.flush()
+                        log_frame("TX", resp_header)
+                        continue
+                    if status == "done":
+                        resp_header = f"{parts[0]}|PY_ARRAY_RESP|{job_id}|{dtype}|{out_count}|{len(out_bytes)}"
+                        hb = resp_header.encode("utf-8")
+                        frame = b"\xFF" + len(hb).to_bytes(4, "big") + hb + out_bytes
+                        self.wfile.write(frame)
+                        self.wfile.flush()
+                        log_frame("TX", resp_header)
+                        continue
+
+                    err_bytes = (err or "py_error").encode("utf-8")
+                    resp_header = f"{parts[0]}|PY_ARRAY_ERROR|{job_id}|txt|0|{len(err_bytes)}"
+                    hb = resp_header.encode("utf-8")
+                    frame = b"\xFF" + len(hb).to_bytes(4, "big") + hb + err_bytes
+                    self.wfile.write(frame)
+                    self.wfile.flush()
+                    log_frame("TX", resp_header)
+                    continue
+
                 if len(parts) >= 6 and parts[1] == "PY_ARRAY_CALL":
                     name = parts[2]
                     dtype = parts[3]
                     count = int(parts[4])
                     raw_len = int(parts[5])
                     payload = self.rfile.read(raw_len) if raw_len > 0 else b""
+                    log_frame("RX", header)
+                    log(f"PY_ARRAY_CALL name={name} dtype={dtype} count={count} raw_len={raw_len}")
                     LAST_ARRAY["name"] = name
                     LAST_ARRAY["dtype"] = dtype
                     LAST_ARRAY["count"] = count
@@ -240,6 +402,7 @@ class Handler(socketserver.StreamRequestHandler):
                     frame = b"\xFF" + len(hb).to_bytes(4, "big") + hb + payload
                     self.wfile.write(frame)
                     self.wfile.flush()
+                    log_frame("TX", resp_header)
                 continue
 
             line = first + self.rfile.readline()
@@ -247,6 +410,7 @@ class Handler(socketserver.StreamRequestHandler):
                 break
 
             try:
+                log(f"RX PY_CALL json_len={len(line)}")
                 req = json.loads(line.decode("utf-8"))
                 resp = handle_request(req)
             except Exception as e:
@@ -264,7 +428,7 @@ class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
 
 def run_server():
     with ThreadedTCPServer((HOST, PORT), Handler) as srv:
-        print(f"PyOutService escutando em {HOST}:{PORT} (server)")
+        log(f"PyOutService escutando em {HOST}:{PORT} (server)")
         srv.serve_forever()
 
 
@@ -272,6 +436,7 @@ def main():
     if MODE in ("server", "legacy"):
         run_server()
     else:
+        log(f"PyOutService gateway mode (hosts={GW_HOSTS} port={GW_PORT})")
         run_gateway_client()
 
 

@@ -14,27 +14,64 @@
 #property service
 #property strict
 
-input int    InpPort    = 9091;
+input int    InpPort    = 9091; // porta do PyIn (cliente Python externo)
 input int    InpBacklog = 4;
 input int    InpSleepMs = 20;
-input string InpPyHost  = "host.docker.internal,127.0.0.1";
-input int    InpPyPort  = 9100;
+input bool   InpLocalhostOnly = false; // true = 127.0.0.1, false = INADDR_ANY
+input bool   InpReuseAddr = true; // SO_REUSEADDR antes do bind
+input string InpPyOutHost  = "192.168.64.35,127.0.0.1,host.docker.internal"; // PyOut (Python externo)
+input int    InpPyOutPort  = 9100; // porta do PyOut
+input int    InpPyOutConnectMs = 2000; // timeout connect PyOut (ms)
+input int    InpPyOutSendMs    = 2000; // timeout send PyOut (ms)
+input int    InpPyOutRecvMs    = 5000; // timeout recv PyOut (ms)
+input int    InpPyOutStepMs    = 50;   // timeout por leitura (ms)
 input bool   InpVerboseLogs = true; // logs ligados por padrão
 
-#include "OficialTelnetServiceSocket/SocketBridge.mqh"
+#include "PyInService/socket-library-mt4-mt5.mqh"
+#include "PyInService/PyInSockClient.mqh"
 
 string LISTENER_VERSION_SOCKET = "pyin-service-1.0.0";
+
+#import "ws2_32.dll"
+int WSAStartup(ushort wVersionRequested, uchar &lpWSAData[]);
+int WSACleanup();
+#import
+
+#define PYIN_WSA_VER 0x0202
+static bool g_wsa_started = false;
+
+bool EnsureWSA()
+{
+  if(g_wsa_started) return true;
+  uchar wsa[400];
+  int res = WSAStartup(PYIN_WSA_VER, wsa);
+  if(res!=0)
+  {
+    Print("[PyIn] WSAStartup failed err=", res);
+    return false;
+  }
+  g_wsa_started = true;
+  return true;
+}
+
+void CleanupWSA()
+{
+  if(g_wsa_started)
+  {
+    WSACleanup();
+    g_wsa_started = false;
+  }
+}
 
 void Log(const string txt)
 {
   if(InpVerboseLogs) Print("[PyIn] ", txt);
 }
 
-uint g_listen = 0;
-uint g_client = 0;
-bool g_wsaInit = false;
+ServerSocket *g_server = NULL;
+ClientSocket *g_client = NULL;
 // cliente python
-uint g_pySock = 0;
+int g_pySock = PYIN_SOCKET_INVALID;
 
 // armazenamento simples do último array recebido
 string g_arr_name="";
@@ -52,112 +89,100 @@ int DTypeSize(const string dt)
   return 0;
 }
 
-bool SendStr(uint sock, const string s)
+
+bool SendStr(ClientSocket *sock, const string s)
 {
+  if(sock==NULL) return false;
   uchar b[]; StringToCharArray(s, b, 0, StringLen(s), CP_UTF8);
-  int r = send(sock, b, ArraySize(b), 0);
-  if(InpVerboseLogs && r<0) Print("[SvcSocket] send falhou err=", GetLastError());
-  return r >= 0;
+  return sock.SendRaw(b, ArraySize(b));
 }
 
-void SendResp(uint sock, string resp)
+void SendResp(ClientSocket *sock, string resp)
 {
   SendStr(sock, resp);
 }
 
-// recebe linha até '\n' (exclui) ou falha
-bool RecvLine(uint sock, string &out)
+bool RecvExact(ClientSocket *sock, int len, uchar &out[])
 {
-  uchar buf[4096]; int idx=0; uchar ch[1];
-  while(true)
-  {
-    int r=recv(sock, ch, 1, 0);
-    if(r<=0) return false;
-    if(ch[0]=='\n') break;
-    if(idx<4096) buf[idx++]=ch[0];
-  }
-  out=CharArrayToString(buf,0,idx,CP_UTF8);
-  return true;
-}
-
-bool RecvExact(uint sock, int len, uchar &out[])
-{
-  ArrayResize(out,len);
+  if(sock==NULL || len<=0) { ArrayResize(out,0); return false; }
+  ArrayResize(out, len);
   int got=0;
-  while(got<len)
+  while(got<len && !IsStopped())
   {
-    int r = recv(sock, out, len-got, 0);
-    if(r<=0) return false;
+    uchar chunk[];
+    int r = sock.RecvRaw(chunk, len-got);
+    if(r==0) { Sleep(1); continue; }
+    if(r<0) return false;
+    ArrayCopy(out, chunk, got, 0, r);
     got += r;
   }
-  return true;
+  return got==len;
 }
 
-// Lê uma mensagem: se começa com 0xFF, trata como frame binário; senão, linha texto até '\n'
-bool RecvMessage(uint sock, bool &isFrame, string &out)
+// Retorna: 1=mensagem lida, 0=sem dados, -1=conexao fechada/erro
+int RecvMessage(ClientSocket *sock, bool &isFrame, string &out)
 {
   isFrame=false; out="";
-  uchar first[1];
-  int r=recv(sock, first, 1, 0);
-  if(r<=0) return false;
+  if(sock==NULL) return -1;
+  uchar firstBuf[];
+  int r = sock.RecvRaw(firstBuf, 1);
+  if(r==0) return 0;   // sem dados
+  if(r<0) return -1;   // erro/fechou
+  uchar first = firstBuf[0];
 
-  if(first[0]==0xFF)
+  if(first==0xFF)
   {
     isFrame=true;
     uchar lenbuf[4];
-    if(!RecvExact(sock,4,lenbuf)) return false;
+    if(!RecvExact(sock,4,lenbuf)) return -1;
     int hdrLen = (lenbuf[0]<<24)|(lenbuf[1]<<16)|(lenbuf[2]<<8)|lenbuf[3];
     uchar hdr[];
-    if(!RecvExact(sock, hdrLen, hdr)) return false;
+    if(!RecvExact(sock, hdrLen, hdr)) return -1;
     out = CharArrayToString(hdr,0,hdrLen,CP_UTF8);
     if(InpVerboseLogs) Log(StringFormat("Frame header: %s", out));
-    return true;
+    return 1;
   }
 
   // texto
   uchar buf[4096]; int idx=0;
-  buf[idx++]=first[0];
+  buf[idx++]=first;
   while(true)
   {
-    if(first[0]=='\n') break;
-    r=recv(sock, first, 1, 0);
-    if(r<=0) break;
-    buf[idx++]=first[0];
+    if(first=='\n') break;
+    uchar chBuf[];
+    r = sock.RecvRaw(chBuf, 1);
+    if(r==0) { Sleep(1); continue; }
+    if(r<0) return -1;
+    first = chBuf[0];
+    buf[idx++]=first;
     if(idx>=4095) break;
-    if(first[0]=='\n') break;
+    if(first=='\n') break;
   }
   out = CharArrayToString(buf,0,idx,CP_UTF8);
   if(InpVerboseLogs) Log("Recv text: "+out);
-  return true;
+  return 1;
 }
 
 bool StartServer()
 {
   if(!EnsureWSA()) return false;
-  g_listen = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-  if(g_listen==0) return false;
-  uchar sa[]; MakeSockAddr(sa, (ushort)InpPort);
-  if(bind(g_listen, sa, ArraySize(sa))!=0) return false;
-  if(!SetNonBlocking(g_listen)) return false;
-  if(listen(g_listen, InpBacklog)!=0) return false;
+  if(g_server!=NULL) { delete g_server; g_server=NULL; }
+  g_server = new ServerSocket((ushort)InpPort, InpLocalhostOnly, InpBacklog, InpReuseAddr);
+  if(g_server==NULL || !g_server.Created())
+  {
+    int err = (g_server!=NULL ? g_server.GetLastSocketError() : 0);
+    Print("[PyIn] Server socket FAILED err=", err, " port=", InpPort);
+    return false;
+  }
   Log("Socket service listening on "+IntegerToString(InpPort));
-  return true;
-}
-
-bool EnsureWSA()
-{
-  if(g_wsaInit) return true;
-  uchar wsa[400];
-  if(WSAStartup(0x202, wsa)!=0) return false;
-  g_wsaInit=true;
   return true;
 }
 
 bool ConnectPy()
 {
-  if(g_pySock!=0) return true;
+  if(g_pySock!=PYIN_SOCKET_INVALID && PySockIsConnected(g_pySock)) return true;
   // suporta fallback em lista "host1,host2"
-  string hosts = InpPyHost;
+  string hosts = InpPyOutHost;
   if(hosts=="") hosts="127.0.0.1";
   string hlist[]; int hn=StringSplit(hosts, ',', hlist);
   if(hn<=0) { ArrayResize(hlist,1); hlist[0]=hosts; hn=1; }
@@ -166,30 +191,17 @@ bool ConnectPy()
   {
     string h = hlist[i]; StringTrimLeft(h); StringTrimRight(h);
     if(h=="") continue;
-    g_pySock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if(g_pySock==0) return false;
-    uint ipHost=0x7F000001; // 127.0.0.1 default
-    if(h!="127.0.0.1")
-    {
-      int a,b,c,d;
-      string partsIP[];
-      if(StringSplit(h,'.',partsIP)==4)
-      {
-        a=(int)StringToInteger(partsIP[0]); b=(int)StringToInteger(partsIP[1]);
-        c=(int)StringToInteger(partsIP[2]); d=(int)StringToInteger(partsIP[3]);
-        ipHost = ((uint)a<<24)|((uint)b<<16)|((uint)c<<8)|(uint)d;
-      }
-    }
-    uchar sa[]; MakeSockAddr(sa, (ushort)InpPyPort, ipHost);
-    if(connect(g_pySock, sa, ArraySize(sa))==0) return true;
-    closesocket(g_pySock); g_pySock=0;
+    string err="";
+    if(PySockConnect(g_pySock, h, (uint)InpPyOutPort, InpPyOutConnectMs, InpPyOutSendMs, InpPyOutRecvMs, err))
+      return true;
+    PySockClose(g_pySock);
   }
   return false;
 }
 
 void ClosePy()
 {
-  if(g_pySock) { closesocket(g_pySock); g_pySock=0; }
+  PySockClose(g_pySock);
 }
 
 bool ShouldLogCheck(const string type)
@@ -204,8 +216,9 @@ bool ShouldLogCheck(const string type)
 }
 
 // ---- PyOutService frame helpers (0xFF + len + header + payload) ----
-bool PySendFrame(uint sock, const string header, uchar &payload[])
+bool PySendFrame(ClientSocket *sock, const string header, uchar &payload[])
 {
+  if(sock==NULL) return false;
   uchar hb[]; StringToCharArray(header, hb, 0, StringLen(header), CP_UTF8);
   int hlen = ArraySize(hb);
   uchar prefix[5];
@@ -214,35 +227,10 @@ bool PySendFrame(uint sock, const string header, uchar &payload[])
   prefix[2]=(uchar)((hlen>>16)&0xFF);
   prefix[3]=(uchar)((hlen>>8)&0xFF);
   prefix[4]=(uchar)(hlen&0xFF);
-  if(send(sock, prefix,5,0)<0) return false;
-  if(send(sock, hb, hlen,0)<0) return false;
+  if(!sock.SendRaw(prefix,5)) return false;
+  if(!sock.SendRaw(hb, hlen)) return false;
   int plen = ArraySize(payload);
-  if(plen>0 && send(sock, payload, plen,0)<0) return false;
-  return true;
-}
-
-bool PyRecvFrame(uint sock, string &header, uchar &payload[])
-{
-  header=""; ArrayResize(payload,0);
-  uchar first[1];
-  int r=recv(sock, first, 1, 0);
-  if(r<=0) return false;
-  if(first[0]!=0xFF) return false;
-  uchar lenbuf[4];
-  if(!RecvExact(sock, 4, lenbuf)) return false;
-  int hlen = (lenbuf[0]<<24)|(lenbuf[1]<<16)|(lenbuf[2]<<8)|lenbuf[3];
-  uchar hb[];
-  if(!RecvExact(sock, hlen, hb)) return false;
-  header = CharArrayToString(hb,0,hlen,CP_UTF8);
-  string parts[]; int n=StringSplit(header,'|',parts);
-  if(n>=6)
-  {
-    int raw_len = (int)StringToInteger(parts[5]);
-    if(raw_len>0)
-    {
-      if(!RecvExact(sock, raw_len, payload)) return false;
-    }
-  }
+  if(plen>0 && !sock.SendRaw(payload, plen)) return false;
   return true;
 }
 string CmdLogFilter(const string type, string &params[])
@@ -290,21 +278,17 @@ string FindErrorInLines(string &lines[], const string filter)
   return "";
 }
 
-uint AcceptClient()
+ClientSocket *AcceptClient()
 {
-  uchar sa[32]; int len=32;
-  uint c = accept(g_listen, sa, len);
-  // ignore invalid sockets (accept failure)
-  if((int)c==-1 || c==0) return 0;
-  // cliente permanece em modo bloqueante para evitar WSAEWOULDBLOCK em leitura imediata
-  return c;
+  if(g_server==NULL) return NULL;
+  return g_server.Accept();
 }
 
 void CloseSockets()
 {
-  if(g_client) { closesocket(g_client); g_client=0; }
-  if(g_listen) { closesocket(g_listen); g_listen=0; }
-  if(g_wsaInit) { WSACleanup(); g_wsaInit=false; }
+  if(g_client!=NULL) { delete g_client; g_client=NULL; }
+  if(g_server!=NULL) { delete g_server; g_server=NULL; }
+  CleanupWSA();
 }
 
 int OnStart()
@@ -317,19 +301,24 @@ int OnStart()
 
   while(!IsStopped())
   {
-    if(g_client==0)
+    if(g_client==NULL)
     {
-      g_client = AcceptClient();
-      if(g_client!=0 && InpVerboseLogs) Log("client connected");
+      ClientSocket *c = AcceptClient();
+      if(c!=NULL)
+      {
+        g_client = c;
+        if(InpVerboseLogs) Log("client connected");
+      }
     }
-    if(g_client!=0)
+    if(g_client!=NULL)
     {
       string line; bool isFrame=false;
-      if(!RecvMessage(g_client, isFrame, line))
+      int rcv = RecvMessage(g_client, isFrame, line);
+      if(rcv==0) { Sleep(InpSleepMs); continue; } // sem dados
+      if(rcv<0)
       {
-        // loga apenas uma vez por conexão
         if(InpVerboseLogs) Log("client done (connection closed)");
-        closesocket(g_client); g_client=0; continue;
+        delete g_client; g_client=NULL; continue;
       }
 
       if(isFrame)
@@ -362,6 +351,124 @@ int OnStart()
               SendResp(g_client, "OK\nstored\n");
             }
           }
+          else if(htype=="PY_ARRAY_SUBMIT" && hn>=6)
+          {
+            string name=hparts[2]; string dtype=hparts[3];
+            int count=(int)StringToInteger(hparts[4]);
+            int raw_len=(int)StringToInteger(hparts[5]);
+            int sz=DTypeSize(dtype);
+            if(sz<=0 || raw_len!=count*sz)
+            {
+              SendResp(g_client, "ERROR\nsize\n");
+            }
+            else
+            {
+              uchar raw[];
+              if(!RecvExact(g_client, raw_len, raw))
+              {
+                SendResp(g_client, "ERROR\nrecv_payload\n");
+                continue;
+              }
+
+              if(!ConnectPy()) { SendResp(g_client, "ERROR\npy_conn\n"); continue; }
+
+              string header = line;
+              string errp="";
+              if(!PySockSendFrame(g_pySock, header, raw, errp))
+              {
+                SendResp(g_client, "ERROR\npy_send_fail\n"); ClosePy();
+                continue;
+              }
+
+              string h=""; uchar payload[];
+              if(!PySockRecvFrame(g_pySock, h, payload, InpPyOutStepMs, InpPyOutRecvMs, errp))
+              {
+                SendResp(g_client, "ERROR\npy_noresp\n"); ClosePy();
+                continue;
+              }
+
+              if(!PySendFrame(g_client, h, payload))
+              {
+                ClosePy();
+                continue;
+              }
+
+              if(InpVerboseLogs) Log(StringFormat("resp to %s OK msg=py_array_ack", hid));
+            }
+          }
+          else if(htype=="PY_ARRAY_POLL" && hn>=6)
+          {
+            if(!ConnectPy()) { SendResp(g_client, "ERROR\npy_conn\n"); continue; }
+
+            uchar empty[]; ArrayResize(empty,0);
+            string header = line;
+            string errp="";
+            if(!PySockSendFrame(g_pySock, header, empty, errp))
+            {
+              SendResp(g_client, "ERROR\npy_send_fail\n"); ClosePy();
+              continue;
+            }
+
+            string h=""; uchar payload[];
+            if(!PySockRecvFrame(g_pySock, h, payload, InpPyOutStepMs, InpPyOutRecvMs, errp))
+            {
+              SendResp(g_client, "ERROR\npy_noresp\n"); ClosePy();
+              continue;
+            }
+
+            if(!PySendFrame(g_client, h, payload))
+            {
+              ClosePy();
+              continue;
+            }
+
+            if(InpVerboseLogs) Log(StringFormat("resp to %s OK msg=py_array_poll", hid));
+          }
+          else if(htype=="PY_ARRAY_CALL" && hn>=6)
+          {
+            string name=hparts[2]; string dtype=hparts[3];
+            int count=(int)StringToInteger(hparts[4]);
+            int raw_len=(int)StringToInteger(hparts[5]);
+            int sz=DTypeSize(dtype);
+            if(sz<=0 || raw_len!=count*sz)
+            {
+              SendResp(g_client, "ERROR\nsize\n");
+            }
+            else
+            {
+              uchar raw[];
+              if(!RecvExact(g_client, raw_len, raw))
+              {
+                SendResp(g_client, "ERROR\nrecv_payload\n");
+                continue;
+              }
+
+              if(!ConnectPy()) { SendResp(g_client, "ERROR\npy_conn\n"); continue; }
+
+              string header = hid+"|PY_ARRAY_CALL|"+name+"|"+dtype+"|"+IntegerToString(count)+"|"+IntegerToString(raw_len);
+              string errp="";
+              if(!PySockSendFrame(g_pySock, header, raw, errp))
+              {
+                SendResp(g_client, "ERROR\npy_send_fail\n"); ClosePy();
+                continue;
+              }
+
+              string h=""; uchar payload[];
+              if(!PySockRecvFrame(g_pySock, h, payload, InpPyOutStepMs, InpPyOutRecvMs, errp))
+              {
+                SendResp(g_client, "ERROR\npy_noresp\n"); ClosePy();
+                continue;
+              }
+
+              if(!PySendFrame(g_client, h, payload))
+              {
+                ClosePy();
+                continue;
+              }
+
+              if(InpVerboseLogs) Log(StringFormat("resp to %s OK msg=py_array_ok", hid));
+            }
+          }
           else if(htype=="GET_ARRAY")
           {
             int sz=DTypeSize(g_arr_dtype);
@@ -375,9 +482,9 @@ int OnStart()
             prefix[2]=(uchar)((hlen>>16)&0xFF);
             prefix[3]=(uchar)((hlen>>8)&0xFF);
             prefix[4]=(uchar)(hlen&0xFF);
-            send(g_client, prefix,5,0);
-            send(g_client, hb, hlen,0);
-            if(raw_len>0) send(g_client, g_arr_data, raw_len,0);
+            g_client.SendRaw(prefix,5);
+            g_client.SendRaw(hb, hlen);
+            if(raw_len>0) g_client.SendRaw(g_arr_data, raw_len);
           }
           else
           {
@@ -426,14 +533,15 @@ int OnStart()
             else
             {
               string header = id+"|PY_ARRAY_CALL|"+name+"|"+dtype+"|"+IntegerToString(count)+"|"+IntegerToString(raw_len);
-              if(!PySendFrame(g_pySock, header, g_arr_data))
+              string errp="";
+              if(!PySockSendFrame(g_pySock, header, g_arr_data, errp))
               {
                 msg="py_send_fail"; ok=false; ClosePy();
               }
               else
               {
                 string h=""; uchar payload[];
-                if(!PyRecvFrame(g_pySock, h, payload))
+                if(!PySockRecvFrame(g_pySock, h, payload, InpPyOutStepMs, InpPyOutRecvMs, errp))
                 {
                   msg="py_noresp"; ok=false; ClosePy();
                 }
@@ -467,9 +575,15 @@ int OnStart()
           else
           {
             string payload = (ArraySize(params)>0)?params[0]:"";
-            SendStr(g_pySock, payload+"\n");
+            string errp="";
+            if(!PySockSendLine(g_pySock, payload+"\n", errp))
+            {
+              msg="py_send_fail"; ok=false; ClosePy();
+            }
+            else
+            {
             string pyresp;
-            if(RecvLine(g_pySock, pyresp))
+            if(PySockRecvLine(g_pySock, pyresp, InpPyOutStepMs, InpPyOutRecvMs, errp))
             {
               ArrayResize(data,1); data[0]=pyresp;
               msg="py_ok"; ok=true;
@@ -478,6 +592,7 @@ int OnStart()
             else
             {
               msg="py_noresp"; ok=false; ClosePy();
+            }
             }
           }
         }
