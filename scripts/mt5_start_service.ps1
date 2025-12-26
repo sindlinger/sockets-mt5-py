@@ -10,7 +10,7 @@ param(
   [string]$NavigatorLabel = "Navigator;Navegador",
   [switch]$ForceNavigatorFocus = $true,
   [int]$MenuScanTimeoutMs = 800,
-  [switch]$RequireForeground = $true,
+  [switch]$RequireForeground = $false,
   [int]$ForegroundTimeoutMs = 800,
   [switch]$Verbose,
   [string]$StopKey = ""
