@@ -275,6 +275,7 @@ if (-not $serviceItem) {
   try {
     $condAny = [System.Windows.Automation.Condition]::TrueCondition
     $allDesc = $nav.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condAny)
+    if ($Verbose) { Write-Host "Descendants encontrados: $($allDesc.Count)" -ForegroundColor Yellow }
     if ($allDesc.Count -eq 0) {
       Write-Host "Nenhum elemento UI encontrado. Talvez o MT5 esteja rodando como administrador." -ForegroundColor Yellow
       Write-Host "Abra o cmdmt/PowerShell como admin, ou rode o MT5 sem admin." -ForegroundColor Yellow
@@ -289,8 +290,16 @@ if (-not $serviceItem) {
       Write-Host "Itens relacionados a Services:" -ForegroundColor Yellow
       foreach ($n in $rel) { Write-Host "  - $n" }
     } else {
-      Write-Host "Itens de árvore (top 50):" -ForegroundColor Yellow
-      foreach ($n in ($names | Select-Object -First 50)) { Write-Host "  - $n" }
+      $namesAny = @()
+      foreach ($el in $allDesc) { if ($el.Current.Name) { $namesAny += $el.Current.Name } }
+      $namesAny = $namesAny | Select-Object -Unique
+      if ($namesAny -and $namesAny.Count -gt 0) {
+        Write-Host "Itens encontrados (top 50):" -ForegroundColor Yellow
+        foreach ($n in ($namesAny | Select-Object -First 50)) { Write-Host "  - $n" }
+      } else {
+        Write-Host "Itens de árvore (top 50):" -ForegroundColor Yellow
+        foreach ($n in ($names | Select-Object -First 50)) { Write-Host "  - $n" }
+      }
     }
   } catch {}
   throw "Service '$ServiceName' nao encontrado no Navigator."
