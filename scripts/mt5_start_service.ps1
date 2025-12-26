@@ -1,6 +1,6 @@
 param(
   [string]$ServiceName = "SocketTelnetService",
-  [string]$WindowTitle = "MetaTrader",
+  [string]$WindowTitle = "MetaTrader;MetaQuotes",
   [string]$Action = "Start",
   [int]$TimeoutSec = 10,
   [string]$StartKey = "i",
@@ -46,15 +46,22 @@ function Find-Window($titlePattern) {
   return $null
 }
 
-function Find-WindowByProcess($names) {
+function Find-WindowByProcess($names, $patterns) {
   foreach ($n in $names) {
     try {
       $procs = Get-Process -Name $n -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle }
       if ($procs) {
-        $p = $procs | Sort-Object StartTime -Descending | Select-Object -First 1
-        try {
-          return [System.Windows.Automation.AutomationElement]::FromHandle($p.MainWindowHandle)
-        } catch {}
+        $cand = $procs | Sort-Object StartTime -Descending
+        foreach ($p in $cand) {
+          $title = $p.MainWindowTitle
+          foreach ($pat in $patterns) {
+            if ($title -like "*$pat*") {
+              try { return [System.Windows.Automation.AutomationElement]::FromHandle($p.MainWindowHandle) } catch {}
+            }
+          }
+        }
+        $p = $cand | Select-Object -First 1
+        try { return [System.Windows.Automation.AutomationElement]::FromHandle($p.MainWindowHandle) } catch {}
       }
     } catch {}
   }
@@ -137,7 +144,7 @@ function Find-Navigator($win, $labels) {
 }
 
 $titlePatterns = $WindowTitle.Split(';') | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
-$fallbackPatterns = @("MetaTrader", "MT5", "Terminal")
+$fallbackPatterns = @("MetaTrader", "MT5", "MetaQuotes")
 $procNames = @("terminal64", "terminal")
 
 $deadline = (Get-Date).AddSeconds($TimeoutSec)
@@ -166,7 +173,7 @@ if (-not $win) {
   }
 }
 if (-not $win) {
-  $win = Find-WindowByProcess $procNames
+  $win = Find-WindowByProcess $procNames ($titlePatterns + $fallbackPatterns)
 }
 if (-not $win) {
   $cands = Find-WindowCandidates $titlePatterns
