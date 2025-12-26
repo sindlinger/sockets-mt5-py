@@ -41,6 +41,7 @@ Comandos:
   compile service NOME
   service compile NOME
   compile here
+  service start NOME
   hotkeys / hotkey
   tester [--root PATH] [--ini FILE] [--timeout SEC] [--width W --height H] [--minimized|--headless] (default 640x480)
   run NOME --ind|--ea [SYMBOL] [TF] [3 dias] [--predownload] [--logtail N] [--quiet] (tester simples)
@@ -619,6 +620,23 @@ def run_mt5_compile_service_name(name: str):
     if not n.lower().endswith(".mq5"):
         n += ".mq5"
     return run_mt5_compile(n)
+
+def run_mt5_start_service(name: str):
+    base = Path(__file__).resolve().parent.parent
+    script = base / "scripts" / "mt5_start_service.sh"
+    if not script.exists():
+        print("script de start não encontrado: scripts/mt5_start_service.sh")
+        return False
+    svc = (name or "").strip().strip('"').strip("'")
+    if not svc:
+        print("uso: service start NOME")
+        return False
+    try:
+        subprocess.run([str(script), svc], check=False)
+        return True
+    except Exception as e:
+        print(f"falha ao iniciar serviço: {e}")
+        return False
 
 def run_mt5_compile_pyservice():
     term = find_terminal_data_dir()
@@ -2924,6 +2942,13 @@ def parse_user_line(line: str, ctx):
             return "COMPILE_SERVICE_NAME", [target]
         return "COMPILE_HERE", []
 
+    if head in ("service","servico") and len(parts) >= 2 and parts[1].lower() in ("start","iniciar","run"):
+        target = " ".join(parts[2:]) if len(parts) >= 3 else ""
+        return "SERVICE_START", [target]
+    if head in ("start","iniciar","run") and len(parts) >= 2 and parts[1].lower() in ("service","servico"):
+        target = " ".join(parts[2:]) if len(parts) >= 3 else ""
+        return "SERVICE_START", [target]
+
     if head in ("ini", "config"):
         if len(parts) < 2:
             print("uso: ini set Section.Key=Valor | ini get Section.Key")
@@ -3447,6 +3472,7 @@ def parse_user_line(line: str, ctx):
             "  compile service NOME         (compila em MQL5/Services)\n"
             "  service compile NOME         (alias)\n"
             "  compile here                 (compila SocketTelnetService.mq5)\n"
+            "  service start NOME           (automation: inicia serviço no MT5)\n"
             "  compile pyservice            (compila PyInServerService.mq5)\n"
             "  compile all                  (compila SocketTelnetService + PyInServerService)\n"
             "  python service <ping|cmd|raw|compile> [args...]  (PyIn 9091)\n"
@@ -4293,6 +4319,10 @@ def main():
                 return
             if cmd_type == "COMPILE_ALL":
                 run_mt5_compile_all_services()
+                return
+            if cmd_type == "SERVICE_START":
+                target = params[0] if params else ""
+                run_mt5_start_service(target)
                 return
             if cmd_type == "RUN_SIMPLE":
                 run_simple(params, ctx)

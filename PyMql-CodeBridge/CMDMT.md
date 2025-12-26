@@ -28,3 +28,4 @@ Comandos relevantes
 - python build -i NOME [--buffers N]   (scaffold STFFT)
 - compile service NOME   (compila serviço em MQL5/Services)
 - service compile NOME   (alias)
+- service start NOME     (automation: inicia serviço no MT5)
