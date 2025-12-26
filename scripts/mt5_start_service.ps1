@@ -206,6 +206,15 @@ if (-not $nav) {
 }
 
 if (-not $nav) {
+  # tenta encontrar Navigator como janela separada
+  $navWins = Find-WindowCandidates $navLabels
+  if ($navWins -and $navWins.Count -ge 1) {
+    if ($Verbose) { Write-Host "Navigator encontrado em janela separada." -ForegroundColor Yellow }
+    $nav = $navWins[0]
+  }
+}
+
+if (-not $nav) {
   $tree = Find-FirstTree $win
   if ($tree) {
     if ($Verbose) { Write-Host "Navigator nao encontrado. Usando Tree principal." -ForegroundColor Yellow }
