@@ -26,3 +26,5 @@ Comandos relevantes
 - python ping|ensure|status [--cupy|--pyout] [host] [port]
 - python cupy <up|down|status|ping|ensure|serve> [host] [port]  (delegado ao pyout_cupy_cli)
 - python build -i NOME [--buffers N]   (scaffold STFFT)
+- compile service NOME   (compila serviço em MQL5/Services)
+- service compile NOME   (alias)

@@ -38,6 +38,8 @@ Comandos:
   gdelprefix PREFIX
   glist [PREFIX [LIMIT]]
   compile ARQUIVO|NOME
+  compile service NOME
+  service compile NOME
   compile here
   hotkeys / hotkey
   tester [--root PATH] [--ini FILE] [--timeout SEC] [--width W --height H] [--minimized|--headless] (default 640x480)
@@ -601,6 +603,22 @@ def run_mt5_compile_service():
         print("serviço não encontrado. Informe o caminho completo.")
         return False
     return run_mt5_compile(str(svc))
+
+def run_mt5_compile_service_name(name: str):
+    term = find_terminal_data_dir()
+    if not term:
+        print("não encontrei o Terminal do MT5. Defina CMDMT_MT5_DATA ou MT5_DATA_DIR.")
+        return False
+    n = (name or "").strip().strip('"').strip("'")
+    if not n:
+        print("uso: compile service NOME")
+        return False
+    n = n.replace("/", "\\")
+    if not n.lower().startswith("services\\"):
+        n = "Services\\" + n
+    if not n.lower().endswith(".mq5"):
+        n += ".mq5"
+    return run_mt5_compile(n)
 
 def run_mt5_compile_pyservice():
     term = find_terminal_data_dir()
@@ -2883,7 +2901,12 @@ def parse_user_line(line: str, ctx):
         return "SELFTEST", [mode]
 
     if head in ("compile", "compilar"):
-        if len(parts) >= 2 and parts[1].lower() in ("here","service","servico"):
+        if len(parts) >= 2 and parts[1].lower() in ("service","servico"):
+            if len(parts) >= 3:
+                target = " ".join(parts[2:])
+                return "COMPILE_SERVICE_NAME", [target]
+            return "COMPILE_HERE", []
+        if len(parts) >= 2 and parts[1].lower() in ("here",):
             return "COMPILE_HERE", []
         if len(parts) >= 2 and parts[1].lower() in ("py","pyservice","python","pyservico"):
             return "COMPILE_PYSERVICE", []
@@ -2894,6 +2917,12 @@ def parse_user_line(line: str, ctx):
             return None
         target = " ".join(parts[1:])
         return "COMPILE", [target]
+
+    if head in ("service","servico") and len(parts) >= 2 and parts[1].lower() in ("compile","compilar"):
+        if len(parts) >= 3:
+            target = " ".join(parts[2:])
+            return "COMPILE_SERVICE_NAME", [target]
+        return "COMPILE_HERE", []
 
     if head in ("ini", "config"):
         if len(parts) < 2:
@@ -3415,6 +3444,8 @@ def parse_user_line(line: str, ctx):
             "  py cupy <up|down|status|ping|ensure|serve> [host] [port]\n"
             "  py ping|ensure|status [--cupy|--pyout] [host] [port]\n"
             "  compile ARQUIVO|NOME         (compila .mq5 via MetaEditor)\n"
+            "  compile service NOME         (compila em MQL5/Services)\n"
+            "  service compile NOME         (alias)\n"
             "  compile here                 (compila SocketTelnetService.mq5)\n"
             "  compile pyservice            (compila PyInServerService.mq5)\n"
             "  compile all                  (compila SocketTelnetService + PyInServerService)\n"
@@ -4252,6 +4283,10 @@ def main():
                 return
             if cmd_type == "COMPILE_HERE":
                 run_mt5_compile_service()
+                return
+            if cmd_type == "COMPILE_SERVICE_NAME":
+                target = params[0] if params else ""
+                run_mt5_compile_service_name(target)
                 return
             if cmd_type == "COMPILE_PYSERVICE":
                 run_mt5_compile_pyservice()
