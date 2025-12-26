@@ -46,6 +46,21 @@ function Find-Window($titlePattern) {
   return $null
 }
 
+function Find-WindowByProcess($names) {
+  foreach ($n in $names) {
+    try {
+      $procs = Get-Process -Name $n -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle }
+      if ($procs) {
+        $p = $procs | Sort-Object StartTime -Descending | Select-Object -First 1
+        try {
+          return [System.Windows.Automation.AutomationElement]::FromHandle($p.MainWindowHandle)
+        } catch {}
+      }
+    } catch {}
+  }
+  return $null
+}
+
 function Get-AllWindows() {
   $root = [System.Windows.Automation.AutomationElement]::RootElement
   $cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Window)
@@ -123,6 +138,7 @@ function Find-Navigator($win, $labels) {
 
 $titlePatterns = $WindowTitle.Split(';') | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
 $fallbackPatterns = @("MetaTrader", "MT5", "Terminal")
+$procNames = @("terminal64", "terminal")
 
 $deadline = (Get-Date).AddSeconds($TimeoutSec)
 $win = $null
@@ -150,6 +166,9 @@ if (-not $win) {
   }
 }
 if (-not $win) {
+  $win = Find-WindowByProcess $procNames
+}
+if (-not $win) {
   $cands = Find-WindowCandidates $titlePatterns
   if (-not $cands -or $cands.Count -eq 0) { $cands = Find-WindowCandidates $fallbackPatterns }
   if ($cands -and $cands.Count -ge 1) {
@@ -165,6 +184,15 @@ if (-not $win) {
   $all = Get-AllWindows
   Write-Host "Janelas encontradas:" -ForegroundColor Yellow
   foreach ($w in $all) { Write-Host "  - $($w.Current.Name)" }
+  try {
+    $pws = Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle }
+    if ($pws) {
+      Write-Host "Janelas (processos):" -ForegroundColor Yellow
+      foreach ($p in ($pws | Sort-Object StartTime -Descending | Select-Object -First 30)) {
+        Write-Host "  - $($p.ProcessName): $($p.MainWindowTitle)"
+      }
+    }
+  } catch {}
   throw "Janela do MT5 nao encontrada (titulo contem '$WindowTitle')."
 }
 
