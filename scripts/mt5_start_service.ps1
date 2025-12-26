@@ -1,6 +1,6 @@
 param(
   [string]$ServiceName = "SocketTelnetService",
-  [string]$WindowTitle = "MetaTrader 5",
+  [string]$WindowTitle = "MetaTrader",
   [string]$Action = "Start",
   [int]$TimeoutSec = 10,
   [string]$StartKey = "i",
@@ -44,6 +44,23 @@ function Find-Window($titlePattern) {
     if ($w.Current.Name -like "*$titlePattern*") { return $w }
   }
   return $null
+}
+
+function Get-AllWindows() {
+  $root = [System.Windows.Automation.AutomationElement]::RootElement
+  $cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Window)
+  return $root.FindAll([System.Windows.Automation.TreeScope]::Children, $cond)
+}
+
+function Find-WindowCandidates($patterns) {
+  $wins = Get-AllWindows
+  $cands = @()
+  foreach ($w in $wins) {
+    foreach ($p in $patterns) {
+      if ($w.Current.Name -like "*$p*") { $cands += $w; break }
+    }
+  }
+  return $cands
 }
 
 function Find-First($root, $name, $controlType) {
@@ -90,13 +107,52 @@ function Find-Navigator($win, $labels) {
   return $null
 }
 
+$titlePatterns = $WindowTitle.Split(';') | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
+$fallbackPatterns = @("MetaTrader", "MT5", "Terminal")
+
 $deadline = (Get-Date).AddSeconds($TimeoutSec)
 $win = $null
 while (-not $win -and (Get-Date) -lt $deadline) {
-  $win = Find-Window $WindowTitle
-  Start-Sleep -Milliseconds 200
+  foreach ($tp in $titlePatterns) {
+    $win = Find-Window $tp
+    if ($win) { break }
+  }
+  if (-not $win) { Start-Sleep -Milliseconds 200 }
 }
-if (-not $win) { throw "Janela do MT5 nao encontrada (titulo contem '$WindowTitle')." }
+if (-not $win) {
+  # tenta foreground se contiver padrao
+  $fg = [Win32]::GetForegroundWindow()
+  if ($fg -ne [IntPtr]::Zero) {
+    $fgTitle = Get-WindowText $fg
+    foreach ($p in $fallbackPatterns) {
+      if ($fgTitle -like "*$p*") {
+        $all = Get-AllWindows
+        foreach ($w in $all) {
+          if ($w.Current.Name -eq $fgTitle) { $win = $w; break }
+        }
+        if ($win) { break }
+      }
+    }
+  }
+}
+if (-not $win) {
+  $cands = Find-WindowCandidates $titlePatterns
+  if (-not $cands -or $cands.Count -eq 0) { $cands = Find-WindowCandidates $fallbackPatterns }
+  if ($cands -and $cands.Count -ge 1) {
+    if ($Verbose) {
+      Write-Host "Candidatos de janela:" -ForegroundColor Yellow
+      foreach ($c in $cands) { Write-Host "  - $($c.Current.Name)" }
+    }
+    # escolhe o primeiro candidato
+    $win = $cands[0]
+  }
+}
+if (-not $win) {
+  $all = Get-AllWindows
+  Write-Host "Janelas encontradas:" -ForegroundColor Yellow
+  foreach ($w in $all) { Write-Host "  - $($w.Current.Name)" }
+  throw "Janela do MT5 nao encontrada (titulo contem '$WindowTitle')."
+}
 
 [Win32]::SetForegroundWindow($win.Current.NativeWindowHandle) | Out-Null
 

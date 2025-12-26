@@ -3,7 +3,7 @@ set -euo pipefail
 
 SERVICE_NAME=${1:-SocketTelnetService}
 ACTION=${2:-Start}
-WINDOW_TITLE=${WINDOW_TITLE:-"MetaTrader 5"}
+WINDOW_TITLE=${WINDOW_TITLE:-"MetaTrader"}
 START_KEY=${START_KEY:-"i"}
 SERVICES_LABEL=${SERVICES_LABEL:-"Services;Serviços"}
 START_MENU_LABEL=${START_MENU_LABEL:-"Iniciar;Start"}
