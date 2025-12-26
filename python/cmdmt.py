@@ -47,7 +47,7 @@ Comandos:
   tester [--root PATH] [--ini FILE] [--timeout SEC] [--width W --height H] [--minimized|--headless] (default 640x480)
   run NOME --ind|--ea [SYMBOL] [TF] [3 dias] [--predownload] [--logtail N] [--quiet] (tester simples)
   logs [last|ARQUIVO.log] [N] (listar/mostrar logs do run)
-  logs pyout|pyin [--server|--client] [N] [filtro...] [--follow]
+  logs pyout|pyin|cupy [--server|--client] [--cupy|--pyout] [N] [filtro...] [--follow]
   py PAYLOAD               (PY_CALL)
   py start all [host] [port] [workers|--workers N]  (reinicia PyOut fora do MT5; host com lista -> bind 0.0.0.0)
   py server all [host] [port] [workers|--workers N] (reinicia PyOut fora do MT5; host com lista -> bind 0.0.0.0)
@@ -1175,6 +1175,15 @@ def _latest_pyout_log():
         return None
     return max(logs, key=lambda p: p.stat().st_mtime)
 
+def _latest_pyout_cupy_log():
+    run_dir = _ensure_run_logs_dir()
+    logs = []
+    logs += list(run_dir.glob("pyout_cupy_*.log"))
+    logs += list(run_dir.glob("pyout_cupy.log"))
+    if not logs:
+        return None
+    return max(logs, key=lambda p: p.stat().st_mtime)
+
 def _follow_file(path: Path, include=None, exclude=None):
     try:
         with path.open("r", encoding="utf-8", errors="ignore") as f:
@@ -1236,6 +1245,19 @@ def _show_pyin_logs(mode: str, tail: int, filters=None, follow=False):
         return
     include = filters or ["pyinserver", "[pyinserver]"]
     _show_mt5_log_filtered(term, "pyin server (mt5)", tail, include=include, follow=follow)
+
+def _show_cupy_logs(mode: str, tail: int, filters=None, follow=False):
+    if mode == "server":
+        path = _latest_pyout_cupy_log()
+        if not path:
+            print("pyout_cupy log não encontrado em run_logs")
+            return
+        _show_file_filtered(path, "pyout_cupy server", tail, include=filters, follow=follow)
+        return
+    # client side: MT5 service/indicator logs
+    term = find_terminal_data_dir()
+    include = filters or ["pyincupyservicebridge", "[pyincupyservicebridge]", "cupy"]
+    _show_mt5_log_filtered(term, "pyout_cupy client (mt5)", tail, include=include, follow=follow)
 
 def _normalize_prog_name(name):
     name = name.strip().strip('"').strip("'")
@@ -3523,7 +3545,7 @@ def parse_user_line(line: str, ctx):
             "         (default size: 640x480, ShutdownTerminal=1)\n"
             "  run CAMINHO --ind|--ea [SYMBOL] [TF] [3 dias] [--model N] [--timeout SEC] [--keep-open|--shutdown] [--predownload] [--predownload-period TF] [--predownload-days N] [--predownload-bars N] [--no-predownload] [--logtail N] [--quiet] (tester simples)\n"
             "  logs [last|ARQUIVO.log] [N] (listar/mostrar logs do run)\n"
-            "  logs pyout|pyin [--server|--client] [N] [filtro...] [--follow]\n"
+            "  logs pyout|pyin|cupy [--server|--client] [--cupy|--pyout] [N] [filtro...] [--follow]\n"
             "  cmd TYPE [PARAMS...]         (envia TYPE direto)\n"
             "  PY_CONNECT | PY_DISCONNECT   (via cmd TYPE ...)\n"
             "  PY_ARRAY_CALL [NAME]         (via cmd TYPE ...)\n"
@@ -4356,13 +4378,14 @@ def main():
                 run_simple(params, ctx)
                 return
             if cmd_type == "RUN_LOGS":
-                if params and params[0].lower() in ("pyout", "pyin"):
+                if params and params[0].lower() in ("pyout", "pyin", "cupy"):
                     target = params[0].lower()
+                    target_variant, rest = _pop_py_target(params[1:], default="pyout")
                     mode = None
                     tail = 200
                     follow = False
                     filters = []
-                    for tok in params[1:]:
+                    for tok in rest:
                         low = tok.lower()
                         if low in ("--server", "server", "-s"):
                             mode = "server"
@@ -4378,8 +4401,18 @@ def main():
                             continue
                         filters.append(tok)
                     mode = mode or "server"
+                    if target == "cupy":
+                        _show_cupy_logs(mode, tail, filters or None, follow=follow)
+                        return
                     if target == "pyout":
-                        _show_pyout_logs(mode, tail, filters or None, follow=follow)
+                        if target_variant == "cupy":
+                            _show_cupy_logs(mode, tail, filters or None, follow=follow)
+                        else:
+                            _show_pyout_logs(mode, tail, filters or None, follow=follow)
+                        return
+                    # pyin
+                    if target_variant == "cupy":
+                        _show_cupy_logs("client", tail, filters or None, follow=follow)
                     else:
                         _show_pyin_logs(mode, tail, filters or None, follow=follow)
                     return

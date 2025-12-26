@@ -30,3 +30,4 @@ Comandos relevantes
 - service compile NOME   (alias)
 - service start NOME     (automation: inicia serviço no MT5)
 - service stop NOME      (automation: para serviço no MT5)
+- logs pyout|pyin|cupy [--server|--client] [--cupy|--pyout] [N] [filtro...] [--follow]
