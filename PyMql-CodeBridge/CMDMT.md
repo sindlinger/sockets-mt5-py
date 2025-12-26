@@ -21,5 +21,7 @@ Comandos relevantes
 -------------------
 - python service <ping|cmd|raw|compile> [args...]
 - python bridge <start|stop|status|ping|ensure> [host] [port]  (delegado ao pyout_cli)
+- python server [pyout|cupy] <up|down|status|ping|ensure|serve|all> [host] [port] [workers|--workers N]
+- python start [pyout|cupy] all [host] [port] [workers|--workers N]
 - python cupy <up|down|status|ping|ensure|serve> [host] [port]  (delegado ao pyout_cupy_cli)
 - python build -i NOME [--buffers N]   (scaffold STFFT)

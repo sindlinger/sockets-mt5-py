@@ -47,6 +47,8 @@ Comandos:
   py PAYLOAD               (PY_CALL)
   py start all [host] [port] [workers|--workers N]  (reinicia PyOut fora do MT5; host com lista -> bind 0.0.0.0)
   py server all [host] [port] [workers|--workers N] (reinicia PyOut fora do MT5; host com lista -> bind 0.0.0.0)
+  py start [pyout|cupy] all [host] [port] [workers|--workers N]
+  py server [pyout|cupy] <up|down|status|ping|ensure|serve|all> [host] [port] [workers|--workers N]
   py cupy <up|down|status|ping|ensure|serve> [host] [port]  (PyOut CuPy)
   cmd TYPE [PARAMS...]     (envia TYPE direto)
   selftest [full]          (smoke test do serviço)
@@ -184,6 +186,24 @@ def _parse_host_port_workers(args, default_hosts, default_port, default_workers)
         workers = int(args2[2])
     host, port = _parse_host_port(args2, default_hosts, default_port)
     return host, port, workers
+
+def _pop_py_target(args, default="pyout"):
+    """Retorna (target, args_sem_target). target in {'pyout','cupy'}."""
+    target = default
+    args2 = list(args)
+    for flag in ("--target", "--cli", "--impl"):
+        if flag in args2:
+            idx = args2.index(flag)
+            if idx + 1 < len(args2):
+                cand = args2[idx + 1].lower()
+                if cand in ("pyout", "cupy"):
+                    target = cand
+                del args2[idx:idx + 2]
+            break
+    if args2 and args2[0].lower() in ("pyout", "cupy"):
+        target = args2[0].lower()
+        args2 = args2[1:]
+    return target, args2
 
 DEFAULT_SYMBOL = "EURUSD"
 DEFAULT_TF = "H1"
@@ -2924,9 +2944,17 @@ def parse_user_line(line: str, ctx):
         rest = parts[2:]
 
         if sub in ("start", "init", "iniciar"):
-            if not rest or rest[0].lower() != "all":
-                print("uso: py start all [host] [port] [workers|--workers N]"); return None
-            args = rest[1:]
+            target, args0 = _pop_py_target(rest, default="pyout")
+            if args0 and args0[0].lower() == "all":
+                args = args0[1:]
+            elif len(args0) >= 2 and args0[0].lower() == "all" and args0[1].lower() in ("pyout","cupy"):
+                target = args0[1].lower()
+                args = args0[2:]
+            else:
+                print("uso: py start [pyout|cupy] all [host] [port] [workers|--workers N]"); return None
+            if target == "cupy":
+                host, port = _parse_host_port(args, DEFAULT_PYOUT_CUPY_HOSTS, DEFAULT_PYOUT_CUPY_PORT)
+                return "PYCUPY_RESTART", [host, str(port)]
             host, port, workers = _parse_host_port_workers(args, DEFAULT_PY_BRIDGE_HOSTS, DEFAULT_PY_BRIDGE_PORT, DEFAULT_PYOUT_WORKERS)
             return "PY_START_ALL", [host, str(port), str(workers)]
 
@@ -2948,9 +2976,34 @@ def parse_user_line(line: str, ctx):
 
         if sub in ("server", "srv", "servidor", "pyout", "pyserver"):
             if len(rest) < 1:
-                print("uso: py server <up|down|status|ping|autostart|ensure|serve|all> [host] [port] [workers|--workers N]"); return None
-            action = rest[0].lower()
-            args = rest[1:]
+                print("uso: py server [pyout|cupy] <up|down|status|ping|autostart|ensure|serve|all> [host] [port] [workers|--workers N]"); return None
+            target, rest2 = _pop_py_target(rest, default="pyout")
+            if len(rest2) < 1:
+                print("uso: py server [pyout|cupy] <up|down|status|ping|autostart|ensure|serve|all> [host] [port] [workers|--workers N]"); return None
+            action = rest2[0].lower()
+            args = rest2[1:]
+            if target == "cupy":
+                if action in ("up", "start"):
+                    host, port = _parse_host_port(args, DEFAULT_PYOUT_CUPY_HOSTS, DEFAULT_PYOUT_CUPY_PORT)
+                    return "PYCUPY_UP", [host, str(port)]
+                if action in ("down", "stop"):
+                    return "PYCUPY_DOWN", []
+                if action == "status":
+                    return "PYCUPY_STATUS", []
+                if action in ("serve", "run", "fg"):
+                    host, port = _parse_host_port(args, DEFAULT_PYOUT_CUPY_HOSTS, DEFAULT_PYOUT_CUPY_PORT)
+                    return "PYCUPY_SERVE", [host, str(port)]
+                if action in ("ping",):
+                    host, port = _parse_host_port(args, DEFAULT_PYOUT_CUPY_HOSTS, DEFAULT_PYOUT_CUPY_PORT)
+                    return "PYCUPY_PING", [host, str(port)]
+                if action in ("ensure", "autostart", "auto"):
+                    host, port = _parse_host_port(args, DEFAULT_PYOUT_CUPY_HOSTS, DEFAULT_PYOUT_CUPY_PORT)
+                    return "PYCUPY_ENSURE", [host, str(port)]
+                if action in ("all", "restart", "reset"):
+                    host, port = _parse_host_port(args, DEFAULT_PYOUT_CUPY_HOSTS, DEFAULT_PYOUT_CUPY_PORT)
+                    return "PYCUPY_RESTART", [host, str(port)]
+                print("uso: py server cupy <up|down|status|ping|ensure|serve|all> [host] [port]"); return None
+
             if action in ("up", "start"):
                 host, port, workers = _parse_host_port_workers(args, DEFAULT_PY_BRIDGE_HOSTS, DEFAULT_PY_BRIDGE_PORT, DEFAULT_PYOUT_WORKERS)
                 return "PYOUT_UP", [host, str(port), str(workers)]
@@ -3354,6 +3407,8 @@ def parse_user_line(line: str, ctx):
             "  py PAYLOAD                   (PY_CALL)\n"
             "  py start all [host] [port] [workers|--workers N]  (reinicia PyOut fora do MT5; host lista -> bind 0.0.0.0)\n"
             "  py server all [host] [port] [workers|--workers N] (reinicia PyOut fora do MT5; host lista -> bind 0.0.0.0)\n"
+            "  py start [pyout|cupy] all [host] [port] [workers|--workers N]\n"
+            "  py server [pyout|cupy] <up|down|status|ping|ensure|serve|all> [host] [port] [workers|--workers N]\n"
             "  py cupy <up|down|status|ping|ensure|serve> [host] [port]\n"
             "  compile ARQUIVO|NOME         (compila .mq5 via MetaEditor)\n"
             "  compile here                 (compila SocketTelnetService.mq5)\n"
@@ -4348,6 +4403,13 @@ def main():
                 host = params[0] if params else DEFAULT_PYOUT_CUPY_HOSTS
                 port = int(params[1]) if len(params) >= 2 else DEFAULT_PYOUT_CUPY_PORT
                 _run_pyout_cupy_cli(["ensure", "--host", host, "--port", str(port)])
+                return
+            if cmd_type == "PYCUPY_RESTART":
+                host = params[0] if params else DEFAULT_PYOUT_CUPY_HOSTS
+                port = int(params[1]) if len(params) >= 2 else DEFAULT_PYOUT_CUPY_PORT
+                _run_pyout_cupy_cli_verbose(["down"])
+                _run_pyout_cupy_cli_verbose(["up", "--host", host, "--port", str(port)])
+                print("OK pyout_cupy reiniciado (fora do MT5)")
                 return
             if cmd_type == "PY_START_ALL":
                 host = params[0] if params else DEFAULT_PY_BRIDGE_HOSTS
