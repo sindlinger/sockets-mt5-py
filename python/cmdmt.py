@@ -2910,19 +2910,6 @@ def parse_user_line(line: str, ctx):
         return None
     # ---- Frases amigáveis em primeira palavra ----
     head = parts[0].lower()
-    if ":" in head:
-        left, right = head.split(":", 1)
-        if left.startswith("cmdmt-"):
-            left = left[len("cmdmt-"):]
-        if left in ("service", "servico") and right in ("start", "iniciar", "run"):
-            target = " ".join(parts[1:]) if len(parts) >= 2 else ""
-            return "SERVICE_START", [target]
-        if left in ("service", "servico") and right in ("compile", "compilar"):
-            target = " ".join(parts[1:]) if len(parts) >= 2 else ""
-            if target:
-                return "COMPILE_SERVICE_NAME", [target]
-            return "COMPILE_HERE", []
-
     if head in ("cmd", "type") and len(parts) >= 2:
         return parts[1].upper(), parts[2:]
 
