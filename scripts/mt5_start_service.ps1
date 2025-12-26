@@ -3,7 +3,7 @@ param(
   [string]$WindowTitle = "MetaTrader;MetaQuotes",
   [string]$Action = "Start",
   [int]$TimeoutSec = 10,
-  [string]$StartKey = "i",
+  [string]$StartKey = "a{ENTER}",
   [string]$ServicesLabel = "Services;Serviços;Servicos",
   [string]$StartMenuLabel = "Iniciar;Start",
   [string]$RefreshMenuLabel = "Atualizar;Refresh",
@@ -115,7 +115,7 @@ function Find-FirstByContainsAny($root, $namePart) {
   return $null
 }
 
-function Invoke-ContextAction($el, $labels, $fallbackKey) {
+function Invoke-ContextAction($el, $labels, $fallbackKey, $preKey = "") {
   try {
     $rect = $el.Current.BoundingRectangle
     if ($rect.Width -gt 0 -and $rect.Height -gt 0) {
@@ -128,6 +128,10 @@ function Invoke-ContextAction($el, $labels, $fallbackKey) {
       Start-Sleep -Milliseconds 200
     }
   } catch {}
+  if ($preKey -ne "") {
+    try { $wshell.SendKeys($preKey) } catch {}
+    Start-Sleep -Milliseconds 150
+  }
   $mi = Find-MenuItemByNameWithin $win $labels $MenuScanTimeoutMs
   if ($mi) {
     try {
@@ -407,7 +411,8 @@ $labels = if ($act -eq "stop") {
 } else {
   $StartMenuLabel.Split(';') | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
 }
-$ok = Invoke-ContextAction $serviceItem $labels $StartKey
+$preKey = if ($act -eq "stop") { "" } else { $StartKey }
+$ok = Invoke-ContextAction $serviceItem $labels $StartKey $preKey
 if (-not $ok) {
   try { $wshell.SendKeys('+{F10}') } catch {}
   Start-Sleep -Milliseconds 200
