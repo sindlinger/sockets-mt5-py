@@ -273,6 +273,12 @@ if (-not $serviceItem) {
 if (-not $serviceItem) {
   # diagnóstico: listar itens de árvore relevantes
   try {
+    $condAny = [System.Windows.Automation.Condition]::TrueCondition
+    $allDesc = $nav.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condAny)
+    if ($allDesc.Count -eq 0) {
+      Write-Host "Nenhum elemento UI encontrado. Talvez o MT5 esteja rodando como administrador." -ForegroundColor Yellow
+      Write-Host "Abra o cmdmt/PowerShell como admin, ou rode o MT5 sem admin." -ForegroundColor Yellow
+    }
     $condItem = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::TreeItem)
     $items = $nav.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condItem)
     $names = @()
