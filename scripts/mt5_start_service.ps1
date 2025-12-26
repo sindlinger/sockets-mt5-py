@@ -200,7 +200,10 @@ if (-not $nav) {
   $nav = Find-Navigator $win $navLabels
 }
 
-if (-not $nav) { throw "Navigator nao encontrado." }
+if (-not $nav) {
+  if ($Verbose) { Write-Host "Navigator nao encontrado. Tentando buscar no root." -ForegroundColor Yellow }
+  $nav = $win
+}
 
 # força foco no Navigator (pane)
 if ($ForceNavigatorFocus) {
