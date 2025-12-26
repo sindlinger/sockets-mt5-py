@@ -4,7 +4,7 @@ param(
   [string]$Action = "Start",
   [int]$TimeoutSec = 10,
   [string]$StartKey = "i",
-  [string]$ServicesLabel = "Services;Serviços",
+  [string]$ServicesLabel = "Services;Serviços;Servicos",
   [string]$StartMenuLabel = "Iniciar;Start",
   [string]$StopMenuLabel = "Parar;Stop",
   [string]$NavigatorLabel = "Navigator;Navegador",
@@ -233,7 +233,25 @@ if (-not $serviceItem) {
   }
 }
 
-if (-not $serviceItem) { throw "Service '$ServiceName' nao encontrado no Navigator." }
+if (-not $serviceItem) {
+  # diagnóstico: listar itens de árvore relevantes
+  try {
+    $condItem = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::TreeItem)
+    $items = $nav.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condItem)
+    $names = @()
+    foreach ($it in $items) { if ($it.Current.Name) { $names += $it.Current.Name } }
+    $names = $names | Select-Object -Unique
+    $rel = $names | Where-Object { $_ -match 'servi' }
+    if ($rel -and $rel.Count -gt 0) {
+      Write-Host "Itens relacionados a Services:" -ForegroundColor Yellow
+      foreach ($n in $rel) { Write-Host "  - $n" }
+    } else {
+      Write-Host "Itens de árvore (top 50):" -ForegroundColor Yellow
+      foreach ($n in ($names | Select-Object -First 50)) { Write-Host "  - $n" }
+    }
+  } catch {}
+  throw "Service '$ServiceName' nao encontrado no Navigator."
+}
 
 # selecionar item
 try {
