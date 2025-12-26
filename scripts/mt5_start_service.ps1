@@ -79,6 +79,15 @@ function Find-FirstByContains($root, $namePart, $controlType) {
   return $null
 }
 
+function Find-FirstByContainsAny($root, $namePart) {
+  $condAny = [System.Windows.Automation.Condition]::TrueCondition
+  $all = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condAny)
+  foreach ($el in $all) {
+    if ($el.Current.Name -like "*$namePart*") { return $el }
+  }
+  return $null
+}
+
 function Find-FirstTree($root) {
   $condType = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Tree)
   return $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condType)
@@ -236,6 +245,11 @@ if ($ForceNavigatorFocus) {
 # procurar service pelo nome (direto no Navigator)
 $serviceItem = Find-FirstByContains $nav $ServiceName ([System.Windows.Automation.ControlType]::TreeItem)
 
+# fallback: procurar por qualquer tipo de elemento com o nome
+if (-not $serviceItem) {
+  $serviceItem = Find-FirstByContainsAny $nav $ServiceName
+}
+
 # fallback: tentar localizar grupo Services/Servicos e buscar dentro
 if (-not $serviceItem) {
   $labels = $ServicesLabel.Split(';') | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
@@ -250,6 +264,9 @@ if (-not $serviceItem) {
       $exp.Expand()
     } catch {}
     $serviceItem = Find-FirstByContains $servicesItem $ServiceName ([System.Windows.Automation.ControlType]::TreeItem)
+    if (-not $serviceItem) {
+      $serviceItem = Find-FirstByContainsAny $servicesItem $ServiceName
+    }
   }
 }
 
