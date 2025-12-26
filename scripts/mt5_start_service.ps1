@@ -1,16 +1,19 @@
 param(
-  [string]$ServiceName = "OficialTelnetServiceSocket",
+  [string]$ServiceName = "SocketTelnetService",
   [string]$WindowTitle = "MetaTrader 5",
+  [string]$Action = "Start",
   [int]$TimeoutSec = 10,
   [string]$StartKey = "i",
   [string]$ServicesLabel = "Services;Serviços",
   [string]$StartMenuLabel = "Iniciar;Start",
+  [string]$StopMenuLabel = "Parar;Stop",
   [string]$NavigatorLabel = "Navigator;Navegador",
   [switch]$ForceNavigatorFocus = $true,
   [int]$MenuScanTimeoutMs = 800,
   [switch]$RequireForeground = $true,
   [int]$ForegroundTimeoutMs = 800,
-  [switch]$Verbose
+  [switch]$Verbose,
+  [string]$StopKey = ""
 )
 
 Add-Type -AssemblyName UIAutomationClient
@@ -190,9 +193,13 @@ $wshell = New-Object -ComObject WScript.Shell
 $wshell.SendKeys('+{F10}')
 Start-Sleep -Milliseconds 200
 
-# tentar clicar no item pelo nome (Start/Iniciar) com timeout curto
-$startLabels = $StartMenuLabel.Split(';') | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
-$mi = Find-MenuItemByNameWithin $win $startLabels $MenuScanTimeoutMs
+$act = $Action.ToLower()
+$labels = if ($act -eq "stop") {
+  $StopMenuLabel.Split(';') | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
+} else {
+  $StartMenuLabel.Split(';') | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
+}
+$mi = Find-MenuItemByNameWithin $win $labels $MenuScanTimeoutMs
 if ($mi) {
   try {
     $inv = $mi.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
@@ -205,5 +212,10 @@ if ($mi) {
 }
 
 # fallback: tecla
-$wshell.SendKeys($StartKey)
-if ($Verbose) { Write-Host "[ok] start enviado (tecla $StartKey)" }
+if ($act -eq "stop" -and $StopKey -ne "") {
+  $wshell.SendKeys($StopKey)
+  if ($Verbose) { Write-Host "[ok] stop enviado (tecla $StopKey)" }
+} else {
+  $wshell.SendKeys($StartKey)
+  if ($Verbose) { Write-Host "[ok] start enviado (tecla $StartKey)" }
+}

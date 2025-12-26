@@ -42,6 +42,7 @@ Comandos:
   service compile NOME
   compile here
   service start NOME
+  service stop NOME
   hotkeys / hotkey
   tester [--root PATH] [--ini FILE] [--timeout SEC] [--width W --height H] [--minimized|--headless] (default 640x480)
   run NOME --ind|--ea [SYMBOL] [TF] [3 dias] [--predownload] [--logtail N] [--quiet] (tester simples)
@@ -632,10 +633,27 @@ def run_mt5_start_service(name: str):
         print("uso: service start NOME")
         return False
     try:
-        subprocess.run([str(script), svc], check=False)
+        subprocess.run([str(script), svc, "Start"], check=False)
         return True
     except Exception as e:
         print(f"falha ao iniciar serviço: {e}")
+        return False
+
+def run_mt5_stop_service(name: str):
+    base = Path(__file__).resolve().parent.parent
+    script = base / "scripts" / "mt5_start_service.sh"
+    if not script.exists():
+        print("script de stop não encontrado: scripts/mt5_start_service.sh")
+        return False
+    svc = (name or "").strip().strip('"').strip("'")
+    if not svc:
+        print("uso: service stop NOME")
+        return False
+    try:
+        subprocess.run([str(script), svc, "Stop"], check=False)
+        return True
+    except Exception as e:
+        print(f"falha ao parar serviço: {e}")
         return False
 
 def run_mt5_compile_pyservice():
@@ -2947,6 +2965,12 @@ def parse_user_line(line: str, ctx):
     if head in ("start","iniciar","run") and len(parts) >= 2 and parts[1].lower() in ("service","servico"):
         target = " ".join(parts[2:]) if len(parts) >= 3 else ""
         return "SERVICE_START", [target]
+    if head in ("service","servico") and len(parts) >= 2 and parts[1].lower() in ("stop","parar"):
+        target = " ".join(parts[2:]) if len(parts) >= 3 else ""
+        return "SERVICE_STOP", [target]
+    if head in ("stop","parar") and len(parts) >= 2 and parts[1].lower() in ("service","servico"):
+        target = " ".join(parts[2:]) if len(parts) >= 3 else ""
+        return "SERVICE_STOP", [target]
 
     if head in ("ini", "config"):
         if len(parts) < 2:
@@ -3472,6 +3496,7 @@ def parse_user_line(line: str, ctx):
             "  service compile NOME         (alias)\n"
             "  compile here                 (compila SocketTelnetService.mq5)\n"
             "  service start NOME           (automation: inicia serviço no MT5)\n"
+            "  service stop NOME            (automation: para serviço no MT5)\n"
             "  compile pyservice            (compila PyInServerService.mq5)\n"
             "  compile all                  (compila SocketTelnetService + PyInServerService)\n"
             "  python service <ping|cmd|raw|compile> [args...]  (PyIn 9091)\n"
@@ -4322,6 +4347,10 @@ def main():
             if cmd_type == "SERVICE_START":
                 target = params[0] if params else ""
                 run_mt5_start_service(target)
+                return
+            if cmd_type == "SERVICE_STOP":
+                target = params[0] if params else ""
+                run_mt5_stop_service(target)
                 return
             if cmd_type == "RUN_SIMPLE":
                 run_simple(params, ctx)

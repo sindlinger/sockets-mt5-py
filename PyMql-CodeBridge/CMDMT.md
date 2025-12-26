@@ -29,3 +29,4 @@ Comandos relevantes
 - compile service NOME   (compila serviço em MQL5/Services)
 - service compile NOME   (alias)
 - service start NOME     (automation: inicia serviço no MT5)
+- service stop NOME      (automation: para serviço no MT5)
