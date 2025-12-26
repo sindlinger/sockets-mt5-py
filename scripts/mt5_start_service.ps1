@@ -147,6 +147,29 @@ function Invoke-ContextAction($el, $labels, $fallbackKey, $preKey = "") {
   return $false
 }
 
+function Open-ContextMenu($el) {
+  try {
+    $rect = $el.Current.BoundingRectangle
+    if ($rect.Width -gt 0 -and $rect.Height -gt 0) {
+      $cx = [int]($rect.Left + ($rect.Width / 2))
+      $cy = [int]($rect.Top + ($rect.Height / 2))
+      [Win32]::SetCursorPos($cx, $cy) | Out-Null
+      Start-Sleep -Milliseconds 80
+      [Win32]::mouse_event([Win32]::MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, [UIntPtr]::Zero)
+      [Win32]::mouse_event([Win32]::MOUSEEVENTF_RIGHTUP, 0, 0, 0, [UIntPtr]::Zero)
+      Start-Sleep -Milliseconds 200
+      return $true
+    }
+  } catch {}
+  return $false
+}
+
+function Menu-HasLabel($labels) {
+  $mi = Find-MenuItemByNameWithin $win $labels $MenuScanTimeoutMs
+  if ($mi) { return $true }
+  return $false
+}
+
 function Find-FirstTree($root) {
   $condType = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Tree)
   return $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condType)
@@ -384,7 +407,7 @@ if (-not $serviceItem) {
       }
     }
   } catch {}
-  throw "Service '$ServiceName' nao encontrado no Navigator."
+  throw "Service '$ServiceName' nao encontrado (etapa=service_lookup)."
 }
 
 # selecionar item
@@ -434,4 +457,21 @@ if (-not $ok) {
     $wshell.SendKeys($StartKey)
     if ($Verbose) { Write-Host "[ok] start enviado (tecla $StartKey)" }
   }
+}
+
+# validação pós-ação: espera e verifica menu oposto
+Start-Sleep -Milliseconds 400
+$expectedLabels = if ($act -eq "stop") {
+  $StartMenuLabel.Split(';') | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
+} else {
+  $StopMenuLabel.Split(';') | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
+}
+$menuOpened = Open-ContextMenu $serviceItem
+if (-not $menuOpened) {
+  throw "Falha ao abrir menu para verificação (etapa=post_check_open)."
+}
+$has = Menu-HasLabel $expectedLabels
+try { $wshell.SendKeys('{ESC}') } catch {}
+if (-not $has) {
+  throw "Ação '$Action' não confirmada (etapa=post_check_menu)."
 }
