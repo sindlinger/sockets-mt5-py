@@ -5,19 +5,21 @@ Papel
 -----
 O cmdmt e' o orquestrador/iniciador. Ele nao faz parte do runtime.
 
-Ele:
-- compila o PyIn (servico MT5)
-- inicia/para o PyOut (python bridge)
-- faz ping/testes rapidos
-- gera scaffold de indicadores (ex.: stfft)
+ Ele:
+- compila o PyInServer (servico MT5)
+- inicia/para o PyOut (via pyout_cli)
+- faz ping/testes rapidos (via pyout_cli)
+- gera scaffold de indicadores (STFFT)
 
 Runtime real
 ------------
-Depois que tudo esta rodando, o fluxo de runtime e' somente:
-  PyIn (MT5) <-> PyOut (Python)
+Depois que tudo esta rodando, o fluxo de runtime e' separado:
+  MT5 (indicador/cliente) -> PyOut (Python)
+  Python (cliente) -> PyInServer (MT5)
 
 Comandos relevantes
 -------------------
 - python service <ping|cmd|raw|compile> [args...]
-- python bridge <start|stop|status|ping|ensure> [host] [port]
-- python build -i stfft [NOME] [--buffers N]
+- python bridge <start|stop|status|ping|ensure> [host] [port]  (delegado ao pyout_cli)
+- python cupy <up|down|status|ping|ensure|serve> [host] [port]  (delegado ao pyout_cupy_cli)
+- python build -i NOME [--buffers N]   (scaffold STFFT)

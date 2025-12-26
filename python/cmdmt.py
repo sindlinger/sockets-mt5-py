@@ -43,7 +43,11 @@ Comandos:
   tester [--root PATH] [--ini FILE] [--timeout SEC] [--width W --height H] [--minimized|--headless] (default 640x480)
   run NOME --ind|--ea [SYMBOL] [TF] [3 dias] [--predownload] [--logtail N] [--quiet] (tester simples)
   logs [last|ARQUIVO.log] [N] (listar/mostrar logs do run)
+  logs pyout|pyin [--server|--client] [N] [filtro...] [--follow]
   py PAYLOAD               (PY_CALL)
+  py start all [host] [port] [workers|--workers N]  (reinicia PyOut fora do MT5; host com lista -> bind 0.0.0.0)
+  py server all [host] [port] [workers|--workers N] (reinicia PyOut fora do MT5; host com lista -> bind 0.0.0.0)
+  py cupy <up|down|status|ping|ensure|serve> [host] [port]  (PyOut CuPy)
   cmd TYPE [PARAMS...]     (envia TYPE direto)
   selftest [full]          (smoke test do serviço)
   raw <linha>
@@ -161,6 +165,26 @@ def _parse_host_port(args, default_hosts, default_port):
         port = int(args[1])
     return host, port
 
+def _parse_host_port_workers(args, default_hosts, default_port, default_workers):
+    workers = default_workers
+    args2 = list(args)
+    # flags --workers / -w
+    if "--workers" in args2:
+        idx = args2.index("--workers")
+        if idx + 1 < len(args2) and args2[idx + 1].lstrip("-").isdigit():
+            workers = int(args2[idx + 1])
+        del args2[idx:idx + 2]
+    if "-w" in args2:
+        idx = args2.index("-w")
+        if idx + 1 < len(args2) and args2[idx + 1].lstrip("-").isdigit():
+            workers = int(args2[idx + 1])
+        del args2[idx:idx + 2]
+    # positional third arg
+    if len(args2) >= 3 and args2[2].lstrip("-").isdigit():
+        workers = int(args2[2])
+    host, port = _parse_host_port(args2, default_hosts, default_port)
+    return host, port, workers
+
 DEFAULT_SYMBOL = "EURUSD"
 DEFAULT_TF = "H1"
 DEFAULT_EA_BASE_TPL = "Moving Average.tpl"
@@ -172,6 +196,9 @@ DEFAULT_PY_SERVICE_HOSTS = os.environ.get("CMDMT_PY_SERVICE_HOSTS", DEFAULT_HOST
 DEFAULT_PY_SERVICE_PORT = int(os.environ.get("CMDMT_PY_SERVICE_PORT", "9091"))
 DEFAULT_PY_BRIDGE_HOSTS = os.environ.get("CMDMT_PY_BRIDGE_HOSTS", DEFAULT_HOSTS)
 DEFAULT_PY_BRIDGE_PORT = int(os.environ.get("CMDMT_PY_BRIDGE_PORT", "9100"))
+DEFAULT_PYOUT_WORKERS = int(os.environ.get("CMDMT_PYOUT_WORKERS", os.environ.get("PYOUT_WORKERS", "2")))
+DEFAULT_PYOUT_CUPY_HOSTS = os.environ.get("CMDMT_PYOUT_CUPY_HOSTS", DEFAULT_HOSTS)
+DEFAULT_PYOUT_CUPY_PORT = int(os.environ.get("CMDMT_PYOUT_CUPY_PORT", "9200"))
 # handshake desabilitado por padrão (conexão direta no serviço)
 CMDMT_HELLO_ENABLED = os.environ.get("CMDMT_HELLO", "0") != "0"
 CMDMT_HELLO_LINE = os.environ.get("CMDMT_HELLO_LINE", "HELLO CMDMT")
@@ -186,18 +213,18 @@ def find_terminal_data_dir():
     candidates = []
     if os.name == "nt":
         base = Path(os.environ.get("APPDATA", "")) / "MetaQuotes" / "Terminal"
-        pattern = str(base / "*" / "MQL5" / "Services" / "OficialTelnetServiceSocket.*")
-        for svc in base.glob("*/MQL5/Services/OficialTelnetServiceSocket.*"):
+        pattern = str(base / "*" / "MQL5" / "Services" / "SocketTelnetService.*")
+        for svc in base.glob("*/MQL5/Services/SocketTelnetService.*"):
             candidates.append(svc)
     else:
         base = Path("/mnt/c/Users")
-        for svc in base.glob("*/AppData/Roaming/MetaQuotes/Terminal/*/MQL5/Services/OficialTelnetServiceSocket.*"):
+        for svc in base.glob("*/AppData/Roaming/MetaQuotes/Terminal/*/MQL5/Services/SocketTelnetService.*"):
             candidates.append(svc)
     if not candidates:
         return None
     # pick most recent service file
     svc = max(candidates, key=lambda p: p.stat().st_mtime)
-    # .../Terminal/<id>/MQL5/Services/OficialTelnetServiceSocket.*
+    # .../Terminal/<id>/MQL5/Services/SocketTelnetService.*
     return svc.parents[2]
 
 def find_mt5_compiler():
@@ -536,7 +563,7 @@ def run_mt5_compile_service():
     if not term:
         print("não encontrei o Terminal do MT5. Defina CMDMT_MT5_DATA ou MT5_DATA_DIR.")
         return False
-    svc = term / "MQL5" / "Services" / "OficialTelnetServiceSocket.mq5"
+    svc = term / "MQL5" / "Services" / "SocketTelnetService.mq5"
     if not svc.exists():
         print("serviço não encontrado. Informe o caminho completo.")
         return False
@@ -547,11 +574,11 @@ def run_mt5_compile_pyservice():
     if not term:
         print("não encontrei o Terminal do MT5. Defina CMDMT_MT5_DATA ou MT5_DATA_DIR.")
         return False
-    svc = term / "MQL5" / "Services" / "PyInService.mq5"
-    if not svc.exists():
-        print("serviço Python não encontrado. Informe o caminho completo.")
+    svc_server = term / "MQL5" / "Services" / "PyInServerService.mq5"
+    if not svc_server.exists():
+        print("serviço PyInServer não encontrado. Informe o caminho completo.")
         return False
-    return run_mt5_compile(str(svc))
+    return run_mt5_compile(str(svc_server))
 
 def run_mt5_compile_all_services():
     ok1 = run_mt5_compile_service()
@@ -989,6 +1016,26 @@ def _latest_file(dir_path: Path, exts=None, after_ts=None):
         return None
     return max(files, key=lambda p: p.stat().st_mtime)
 
+def _latest_log_in_dirs(dirs):
+    latest = None
+    for d in dirs:
+        cand = _latest_file(d, exts={".log"})
+        if cand and (not latest or cand.stat().st_mtime > latest.stat().st_mtime):
+            latest = cand
+    return latest
+
+def _filter_lines(lines, include=None, exclude=None):
+    if not lines:
+        return []
+    out = lines
+    if include:
+        inc = [s.lower() for s in include]
+        out = [ln for ln in out if any(s in ln.lower() for s in inc)]
+    if exclude:
+        exc = [s.lower() for s in exclude]
+        out = [ln for ln in out if not any(s in ln.lower() for s in exc)]
+    return out
+
 def _print_block(title: str, lines):
     if not lines:
         return
@@ -1030,6 +1077,78 @@ def _show_run_log(name=None, tail=200):
         path = logs[0]
     lines = _tail_lines(path, tail)
     _print_block(f"log: {path}", lines)
+
+def _latest_pyout_log():
+    run_dir = _ensure_run_logs_dir()
+    logs = []
+    logs += list(run_dir.glob("pyout_*.log"))
+    logs += list(run_dir.glob("pyout_server*.log"))
+    logs += list(run_dir.glob("pyout.log"))
+    if not logs:
+        return None
+    return max(logs, key=lambda p: p.stat().st_mtime)
+
+def _follow_file(path: Path, include=None, exclude=None):
+    try:
+        with path.open("r", encoding="utf-8", errors="ignore") as f:
+            f.seek(0, 2)
+            while True:
+                line = f.readline()
+                if not line:
+                    time.sleep(0.2)
+                    continue
+                line = line.rstrip("\n")
+                if include and not any(s.lower() in line.lower() for s in include):
+                    continue
+                if exclude and any(s.lower() in line.lower() for s in exclude):
+                    continue
+                print(line)
+    except KeyboardInterrupt:
+        return
+
+def _show_file_filtered(path: Path, title: str, tail: int, include=None, exclude=None, follow=False):
+    if not path or not path.exists():
+        print("log não encontrado")
+        return
+    want = max(tail * 5, 200) if tail > 0 else 200
+    lines = _tail_lines(path, want)
+    lines = _filter_lines(lines, include=include, exclude=exclude)
+    if tail > 0 and len(lines) > tail:
+        lines = lines[-tail:]
+    _print_block(f"{title}: {path}", lines or ["(sem linhas)"])
+    if follow:
+        _follow_file(path, include=include, exclude=exclude)
+
+def _show_mt5_log_filtered(term: Path, title: str, tail: int, include=None, exclude=None, follow=False):
+    if not term:
+        print("ERROR terminal_dir (defina CMDMT_MT5_DATA)")
+        return
+    log_path = _latest_log_in_dirs([term / "MQL5" / "Logs", term / "Logs"])
+    if not log_path:
+        print("logs MT5 não encontrados")
+        return
+    _show_file_filtered(log_path, title, tail, include=include, exclude=exclude, follow=follow)
+
+def _show_pyout_logs(mode: str, tail: int, filters=None, follow=False):
+    if mode == "client":
+        term = find_terminal_data_dir()
+        include = filters or ["pyout"]
+        _show_mt5_log_filtered(term, "pyout client (mt5)", tail, include=include, follow=follow)
+        return
+    path = _latest_pyout_log()
+    if not path:
+        print("pyout log não encontrado em run_logs")
+        return
+    _show_file_filtered(path, "pyout server", tail, include=filters, follow=follow)
+
+def _show_pyin_logs(mode: str, tail: int, filters=None, follow=False):
+    term = find_terminal_data_dir()
+    if mode == "client":
+        include = filters or ["pyinclient", "[pyinclient]"]
+        _show_mt5_log_filtered(term, "pyin client (mt5)", tail, include=include, follow=follow)
+        return
+    include = filters or ["pyinserver", "[pyinserver]"]
+    _show_mt5_log_filtered(term, "pyin server (mt5)", tail, include=include, follow=follow)
 
 def _normalize_prog_name(name):
     name = name.strip().strip('"').strip("'")
@@ -2292,87 +2411,66 @@ def _pid_alive(pid: int) -> bool:
     except Exception:
         return False
 
-def pybridge_start():
-    pid_path = _pybridge_pid_path()
-    if pid_path.exists():
-        try:
-            pid = int(pid_path.read_text().strip())
-            if _pid_alive(pid):
-                print(f"pybridge já está rodando (pid={pid})")
-                return True
-        except Exception:
-            pass
-        try:
-            pid_path.unlink()
-        except Exception:
-            pass
+def _pyout_cli_path():
     base = Path(__file__).resolve().parent.parent
-    script = base / "PyMql-CodeBridge" / "pyout" / "pyout_server.py"
-    cmd = [sys.executable, str(script)]
-    try:
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-        pid_path.write_text(str(proc.pid))
-        print(f"pybridge iniciado (pid={proc.pid})")
-        return True
-    except Exception as e:
-        print(f"falha ao iniciar pybridge: {e}")
+    return base / "PyMql-CodeBridge" / "pyout" / "pyout_cli.py"
+
+def _run_pyout_cli(args: list[str]) -> bool:
+    path = _pyout_cli_path()
+    if not path.exists():
+        print("ERROR pyout_cli.py não encontrado")
         return False
+    cmd = [sys.executable, str(path)] + args
+    try:
+        return subprocess.call(cmd) == 0
+    except Exception as e:
+        print(f"falha ao executar pyout_cli: {e}")
+        return False
+
+def _run_pyout_cli_verbose(args: list[str]) -> bool:
+    print(f"[pyout_cli] {' '.join(args)}")
+    ok = _run_pyout_cli(args)
+    print(f"[pyout_cli] rc={'0' if ok else '1'}")
+    return ok
+
+def _pyout_cupy_cli_path():
+    base = Path(__file__).resolve().parent.parent
+    return base / "PyMql-CodeBridge" / "pyout_cupy" / "pyout_cupy_cli.py"
+
+def _run_pyout_cupy_cli(args: list[str]) -> bool:
+    path = _pyout_cupy_cli_path()
+    if not path.exists():
+        print("ERROR pyout_cupy_cli.py nao encontrado")
+        return False
+    cmd = [sys.executable, str(path)] + args
+    try:
+        return subprocess.call(cmd) == 0
+    except Exception as e:
+        print(f"falha ao executar pyout_cupy_cli: {e}")
+        return False
+
+def _run_pyout_cupy_cli_verbose(args: list[str]) -> bool:
+    print(f"[pyout_cupy_cli] {' '.join(args)}")
+    ok = _run_pyout_cupy_cli(args)
+    print(f"[pyout_cupy_cli] rc={'0' if ok else '1'}")
+    return ok
+
+def _pyout_bind_host(hosts: str) -> str:
+    h = (hosts or "").strip()
+    if not h:
+        return "0.0.0.0"
+    if "," in h or ";" in h:
+        return "0.0.0.0"
+    return h
+
+def pybridge_start():
+    return _run_pyout_cli(["start"])
 
 def pybridge_stop():
-    pid_path = _pybridge_pid_path()
-    if not pid_path.exists():
-        print("pybridge não está rodando (pidfile ausente)")
-        return False
-    try:
-        pid = int(pid_path.read_text().strip())
-    except Exception:
-        print("pidfile inválido")
-        return False
-    if not _pid_alive(pid):
-        print("pybridge já não está rodando")
-        try:
-            pid_path.unlink()
-        except Exception:
-            pass
-        return True
-    try:
-        os.kill(pid, signal.SIGTERM)
-        time.sleep(0.3)
-        if _pid_alive(pid):
-            try:
-                os.kill(pid, signal.SIGKILL)
-            except Exception:
-                pass
-        try:
-            pid_path.unlink()
-        except Exception:
-            pass
-        print("pybridge parado")
-        return True
-    except Exception as e:
-        print(f"falha ao parar pybridge: {e}")
-        return False
+    return _run_pyout_cli(["stop"])
 
 def pybridge_status():
-    pid_path = _pybridge_pid_path()
-    if not pid_path.exists():
-        print("pybridge: parado")
-        return False
-    try:
-        pid = int(pid_path.read_text().strip())
-        if _pid_alive(pid):
-            print(f"pybridge: rodando (pid={pid})")
-            return True
-        print("pybridge: parado (pidfile antigo)")
-        return False
-    except Exception:
-        print("pybridge: estado desconhecido")
-        return False
+    return _run_pyout_cli(["status"])
 
 def resolve_expert_path(terminal_dir: Path, expert_name: str) -> str:
     name = expert_name.strip().replace("/", "\\")
@@ -2820,10 +2918,17 @@ def parse_user_line(line: str, ctx):
 
     if head in ("python", "py"):
         if len(parts) < 2:
-            print("uso: python <build|service|bridge> ...")
+            print("uso: python <build|service|bridge|server|cupy> ...")
             return None
         sub = parts[1].lower()
         rest = parts[2:]
+
+        if sub in ("start", "init", "iniciar"):
+            if not rest or rest[0].lower() != "all":
+                print("uso: py start all [host] [port] [workers|--workers N]"); return None
+            args = rest[1:]
+            host, port, workers = _parse_host_port_workers(args, DEFAULT_PY_BRIDGE_HOSTS, DEFAULT_PY_BRIDGE_PORT, DEFAULT_PYOUT_WORKERS)
+            return "PY_START_ALL", [host, str(port), str(workers)]
 
         if sub in ("service", "svc", "pyservice"):
             if len(rest) < 1:
@@ -2841,6 +2946,32 @@ def parse_user_line(line: str, ctx):
                 return "PYSERVICE_CMD", [args[0].upper()] + args[1:]
             print("uso: python service <ping|cmd|raw|compile> [args...]"); return None
 
+        if sub in ("server", "srv", "servidor", "pyout", "pyserver"):
+            if len(rest) < 1:
+                print("uso: py server <up|down|status|ping|autostart|ensure|serve|all> [host] [port] [workers|--workers N]"); return None
+            action = rest[0].lower()
+            args = rest[1:]
+            if action in ("up", "start"):
+                host, port, workers = _parse_host_port_workers(args, DEFAULT_PY_BRIDGE_HOSTS, DEFAULT_PY_BRIDGE_PORT, DEFAULT_PYOUT_WORKERS)
+                return "PYOUT_UP", [host, str(port), str(workers)]
+            if action in ("down", "stop"):
+                return "PYOUT_DOWN", []
+            if action == "status":
+                return "PYOUT_STATUS", []
+            if action in ("serve", "run", "fg"):
+                host, port, workers = _parse_host_port_workers(args, DEFAULT_PY_BRIDGE_HOSTS, DEFAULT_PY_BRIDGE_PORT, DEFAULT_PYOUT_WORKERS)
+                return "PYOUT_SERVE", [host, str(port), str(workers)]
+            if action in ("ping",):
+                host, port = _parse_host_port(args, DEFAULT_PY_BRIDGE_HOSTS, DEFAULT_PY_BRIDGE_PORT)
+                return "PYOUT_PING", [host, str(port)]
+            if action in ("ensure", "autostart", "auto"):
+                host, port = _parse_host_port(args, DEFAULT_PY_BRIDGE_HOSTS, DEFAULT_PY_BRIDGE_PORT)
+                return "PYOUT_ENSURE", [host, str(port)]
+            if action in ("all", "restart", "reset"):
+                host, port, workers = _parse_host_port_workers(args, DEFAULT_PY_BRIDGE_HOSTS, DEFAULT_PY_BRIDGE_PORT, DEFAULT_PYOUT_WORKERS)
+                return "PY_START_ALL", [host, str(port), str(workers)]
+            print("uso: py server <up|down|status|ping|autostart|ensure|serve|all> [host] [port] [workers|--workers N]"); return None
+
         if sub in ("bridge", "pybridge"):
             if len(rest) < 1:
                 print("uso: python bridge <start|stop|status|ping|ensure> [host] [port]"); return None
@@ -2857,9 +2988,32 @@ def parse_user_line(line: str, ctx):
                 return ("PYBRIDGE_ENSURE" if action=="ensure" else "PYBRIDGE_PING", [host, str(port)])
             print("uso: python bridge <start|stop|status|ping|ensure> [host] [port]"); return None
 
+        if sub in ("cupy", "pycupy", "pyout_cupy"):
+            if len(rest) < 1:
+                print("uso: python cupy <up|down|status|ping|ensure|serve> [host] [port]"); return None
+            action = rest[0].lower()
+            args = rest[1:]
+            if action in ("up", "start"):
+                host, port = _parse_host_port(args, DEFAULT_PYOUT_CUPY_HOSTS, DEFAULT_PYOUT_CUPY_PORT)
+                return "PYCUPY_UP", [host, str(port)]
+            if action in ("down", "stop"):
+                return "PYCUPY_DOWN", []
+            if action == "status":
+                return "PYCUPY_STATUS", []
+            if action in ("serve", "run", "fg"):
+                host, port = _parse_host_port(args, DEFAULT_PYOUT_CUPY_HOSTS, DEFAULT_PYOUT_CUPY_PORT)
+                return "PYCUPY_SERVE", [host, str(port)]
+            if action in ("ping",):
+                host, port = _parse_host_port(args, DEFAULT_PYOUT_CUPY_HOSTS, DEFAULT_PYOUT_CUPY_PORT)
+                return "PYCUPY_PING", [host, str(port)]
+            if action in ("ensure", "autostart", "auto"):
+                host, port = _parse_host_port(args, DEFAULT_PYOUT_CUPY_HOSTS, DEFAULT_PYOUT_CUPY_PORT)
+                return "PYCUPY_ENSURE", [host, str(port)]
+            print("uso: python cupy <up|down|status|ping|ensure|serve> [host] [port]"); return None
+
         if sub in ("build", "scaffold"):
             if not rest:
-                print("uso: python build -i stfft [NOME] [--buffers N]"); return None
+                print("uso: python build -i NOME [--buffers N]"); return None
             mode = None
             buffers = 1
             pos = []
@@ -2873,7 +3027,7 @@ def parse_user_line(line: str, ctx):
                     continue
                 if low in ("--buffers", "-b"):
                     if i + 1 >= len(rest):
-                        print("uso: python build -i stfft [NOME] [--buffers N]"); return None
+                        print("uso: python build -i NOME [--buffers N]"); return None
                     try:
                         buffers = int(rest[i + 1])
                     except Exception:
@@ -2881,26 +3035,25 @@ def parse_user_line(line: str, ctx):
                     i += 2
                     continue
                 if tok.startswith("-"):
-                    print("uso: python build -i stfft [NOME] [--buffers N]"); return None
+                    print("uso: python build -i NOME [--buffers N]"); return None
                 pos.append(tok)
                 i += 1
             if mode != "ind":
-                print("uso: python build -i stfft [NOME] [--buffers N]"); return None
+                print("uso: python build -i NOME [--buffers N]"); return None
+            # scaffold único: stfft
             template = "stfft"
             name = ""
             if pos:
+                # aceita "stfft" apenas por compatibilidade; não é necessário
                 if pos[0].lower() in ("stfft", "stft"):
-                    template = "stfft"
-                    name = " ".join(pos[1:]).strip() or pos[0]
+                    name = " ".join(pos[1:]).strip() or ""
                 else:
                     name = " ".join(pos).strip()
-            if template != "stfft":
-                print("erro: template desconhecido"); return None
             if not name:
                 name = template
             return "IND_STFFT", [name, str(buffers)]
 
-        print("uso: python <build|service|bridge> ...")
+        print("uso: python <build|service|bridge|server> ...")
         return None
 
     if head in ("legacy", "leg"):
@@ -2944,9 +3097,8 @@ def parse_user_line(line: str, ctx):
 
         if sub in ("ind", "indicator"):
             if len(rest) < 1:
-                print("uso: legacy ind NOME -stfft [--buffers N]")
+                print("uso: legacy ind NOME [--buffers N]")
                 return None
-            mode = None
             buffers = 1
             name_tokens = []
             i = 0
@@ -2954,12 +3106,12 @@ def parse_user_line(line: str, ctx):
                 tok = rest[i]
                 low = tok.lower()
                 if low in ("stfft", "stft", "-stfft", "--stfft", "-stft", "--stft"):
-                    mode = "stfft"
+                    # compat: ignore (não é mais obrigatório)
                     i += 1
                     continue
                 if low in ("--buffers", "-b"):
                     if i + 1 >= len(rest):
-                        print("uso: legacy ind NOME -stfft [--buffers N]")
+                        print("uso: legacy ind NOME [--buffers N]")
                         return None
                     try:
                         buffers = int(rest[i + 1])
@@ -2969,16 +3121,13 @@ def parse_user_line(line: str, ctx):
                     i += 2
                     continue
                 if tok.startswith("-"):
-                    print("uso: legacy ind NOME -stfft [--buffers N]")
+                    print("uso: legacy ind NOME [--buffers N]")
                     return None
                 name_tokens.append(tok)
                 i += 1
-            if mode != "stfft":
-                print("uso: legacy ind NOME -stfft [--buffers N]")
-                return None
             name = " ".join(name_tokens).strip()
             if not name:
-                print("uso: legacy ind NOME -stfft [--buffers N]")
+                print("uso: legacy ind NOME [--buffers N]")
                 return None
             return "IND_STFFT", [name, str(buffers)]
 
@@ -3203,16 +3352,21 @@ def parse_user_line(line: str, ctx):
             "  screenshot SYMBOL TF FILE WIDTH [HEIGHT]\n"
             "  screenshot_sweep ... | drop_info ...\n"
             "  py PAYLOAD                   (PY_CALL)\n"
+            "  py start all [host] [port] [workers|--workers N]  (reinicia PyOut fora do MT5; host lista -> bind 0.0.0.0)\n"
+            "  py server all [host] [port] [workers|--workers N] (reinicia PyOut fora do MT5; host lista -> bind 0.0.0.0)\n"
+            "  py cupy <up|down|status|ping|ensure|serve> [host] [port]\n"
             "  compile ARQUIVO|NOME         (compila .mq5 via MetaEditor)\n"
-            "  compile here                 (compila OficialTelnetServiceSocket.mq5)\n"
-            "  compile pyservice            (compila PyInService.mq5)\n"
-            "  compile all                  (compila os dois serviços)\n"
+            "  compile here                 (compila SocketTelnetService.mq5)\n"
+            "  compile pyservice            (compila PyInServerService.mq5)\n"
+            "  compile all                  (compila SocketTelnetService + PyInServerService)\n"
             "  python service <ping|cmd|raw|compile> [args...]  (PyIn 9091)\n"
-            "  python bridge <start|stop|status|ping|ensure> [host] [port]\n"
-            "  python build -i stfft [NOME] [--buffers N]\n"
+            "  py server <up|down|status|ping|autostart|ensure|serve> [host] [port] [workers|--workers N]  (delegado ao pyout_cli)\n"
+            "  python bridge <start|stop|status|ping|ensure> [host] [port]  (delegado ao pyout_cli)\n"
+            "  python cupy <up|down|status|ping|ensure|serve> [host] [port]  (delegado ao pyout_cupy_cli)\n"
+            "  python build -i NOME [--buffers N]   (scaffold STFFT)\n"
             "  legacy pyservice <ping|cmd|raw|compile> [args...]\n"
             "  legacy pybridge <start|stop|status|ping|ensure> [host] [port]\n"
-            "  legacy ind NOME -stfft [--buffers N]\n"
+            "  legacy ind NOME [--buffers N]\n"
             "  hotkeys                       (lista hotkeys e uso)\n"
             "  cmd+hotkeys                   (lista + exemplo)\n"
             "  hotkey save NOME \"CMD; CMD\"  (salva sequência)\n"
@@ -3229,6 +3383,7 @@ def parse_user_line(line: str, ctx):
             "         (default size: 640x480, ShutdownTerminal=1)\n"
             "  run CAMINHO --ind|--ea [SYMBOL] [TF] [3 dias] [--model N] [--timeout SEC] [--keep-open|--shutdown] [--predownload] [--predownload-period TF] [--predownload-days N] [--predownload-bars N] [--no-predownload] [--logtail N] [--quiet] (tester simples)\n"
             "  logs [last|ARQUIVO.log] [N] (listar/mostrar logs do run)\n"
+            "  logs pyout|pyin [--server|--client] [N] [filtro...] [--follow]\n"
             "  cmd TYPE [PARAMS...]         (envia TYPE direto)\n"
             "  PY_CONNECT | PY_DISCONNECT   (via cmd TYPE ...)\n"
             "  PY_ARRAY_CALL [NAME]         (via cmd TYPE ...)\n"
@@ -3237,7 +3392,7 @@ def parse_user_line(line: str, ctx):
             "  json <json inteiro>          (envia JSON bruto)\n"
             "  quit\n"
             "\nObs: default = EURUSD H1 (se não informar SYMBOL/TF)\n"
-            "Obs: ';' separa multiplos comandos. No modo nao-interativo use aspas:\n"
+            "Obs: ';' separa multiplos comandos. No modo nao-interativo use aspas SOMENTE com ';':\n"
             "      python cmdmt.py \"open EURUSD H1; attachind ZigZag 1\"\n"
         )
         return None
@@ -3804,7 +3959,23 @@ def main():
     # Fonte de comandos não interativa: positional, --file ou stdin pipe
     lines = None
     if args.command:
-        lines = [" ".join(args.command)]
+        if len(args.command) == 1:
+            line_raw = args.command[0]
+            # fora do interativo, aspas só fazem sentido com ';' ou payloads especiais
+            if " " in line_raw and ";" not in line_raw:
+                low = line_raw.lstrip().lower()
+                allow = False
+                if low.startswith(("raw ", "json ")):
+                    allow = True
+                if any(ch in line_raw for ch in ("|", "&", "<", ">")):
+                    allow = True
+                if not allow:
+                    print("ERROR: no modo nao-interativo use sem aspas; use aspas apenas com ';' (sequencia) ou raw/json")
+                    reset_color()
+                    return
+            lines = [line_raw]
+        else:
+            lines = [" ".join(args.command)]
     elif args.file is not None:
         with open(args.file, "r", encoding="utf-8", errors="ignore") as f:
             lines = [ln.strip() for ln in f.readlines() if ln.strip()!=""]
@@ -4033,6 +4204,33 @@ def main():
                 run_simple(params, ctx)
                 return
             if cmd_type == "RUN_LOGS":
+                if params and params[0].lower() in ("pyout", "pyin"):
+                    target = params[0].lower()
+                    mode = None
+                    tail = 200
+                    follow = False
+                    filters = []
+                    for tok in params[1:]:
+                        low = tok.lower()
+                        if low in ("--server", "server", "-s"):
+                            mode = "server"
+                            continue
+                        if low in ("--client", "client", "-c"):
+                            mode = "client"
+                            continue
+                        if low in ("--follow", "--tail", "-f"):
+                            follow = True
+                            continue
+                        if tok.isdigit():
+                            tail = int(tok)
+                            continue
+                        filters.append(tok)
+                    mode = mode or "server"
+                    if target == "pyout":
+                        _show_pyout_logs(mode, tail, filters or None, follow=follow)
+                    else:
+                        _show_pyin_logs(mode, tail, filters or None, follow=follow)
+                    return
                 if not params:
                     _list_run_logs()
                 else:
@@ -4088,19 +4286,77 @@ def main():
             if cmd_type == "PYBRIDGE_PING":
                 host = params[0] if params else DEFAULT_PY_BRIDGE_HOSTS
                 port = int(params[1]) if len(params) >= 2 else DEFAULT_PY_BRIDGE_PORT
-                okp, info = _ping_pybridge(host, port)
-                print(("OK " if okp else "ERROR ") + info)
+                _run_pyout_cli(["ping", "--host", host, "--port", str(port)])
                 return
             if cmd_type == "PYBRIDGE_ENSURE":
                 host = params[0] if params else DEFAULT_PY_BRIDGE_HOSTS
                 port = int(params[1]) if len(params) >= 2 else DEFAULT_PY_BRIDGE_PORT
-                okp, info = _ping_pybridge(host, port)
-                if okp:
-                    print("OK pybridge_alive")
-                    return
-                pybridge_start()
-                okp2, info2 = _ping_pybridge(host, port)
-                print(("OK " if okp2 else "ERROR ") + (info2 or "pybridge"))
+                _run_pyout_cli(["ensure", "--host", host, "--port", str(port)])
+                return
+            if cmd_type == "PYOUT_UP":
+                host = params[0] if params else DEFAULT_PY_BRIDGE_HOSTS
+                port = int(params[1]) if len(params) >= 2 else DEFAULT_PY_BRIDGE_PORT
+                workers = int(params[2]) if len(params) >= 3 else DEFAULT_PYOUT_WORKERS
+                bind_host = _pyout_bind_host(host)
+                _run_pyout_cli(["up", "--host", bind_host, "--port", str(port), "--workers", str(workers)])
+                return
+            if cmd_type == "PYOUT_DOWN":
+                _run_pyout_cli(["down"])
+                return
+            if cmd_type == "PYOUT_STATUS":
+                _run_pyout_cli(["status"])
+                return
+            if cmd_type == "PYOUT_SERVE":
+                host = params[0] if params else DEFAULT_PY_BRIDGE_HOSTS
+                port = int(params[1]) if len(params) >= 2 else DEFAULT_PY_BRIDGE_PORT
+                workers = int(params[2]) if len(params) >= 3 else DEFAULT_PYOUT_WORKERS
+                bind_host = _pyout_bind_host(host)
+                _run_pyout_cli(["run", "--host", bind_host, "--port", str(port), "--workers", str(workers)])
+                return
+            if cmd_type == "PYOUT_PING":
+                host = params[0] if params else DEFAULT_PY_BRIDGE_HOSTS
+                port = int(params[1]) if len(params) >= 2 else DEFAULT_PY_BRIDGE_PORT
+                _run_pyout_cli(["ping", "--host", host, "--port", str(port)])
+                return
+            if cmd_type == "PYOUT_ENSURE":
+                host = params[0] if params else DEFAULT_PY_BRIDGE_HOSTS
+                port = int(params[1]) if len(params) >= 2 else DEFAULT_PY_BRIDGE_PORT
+                _run_pyout_cli(["ensure", "--host", host, "--port", str(port)])
+                return
+            if cmd_type == "PYCUPY_UP":
+                host = params[0] if params else DEFAULT_PYOUT_CUPY_HOSTS
+                port = int(params[1]) if len(params) >= 2 else DEFAULT_PYOUT_CUPY_PORT
+                _run_pyout_cupy_cli(["up", "--host", host, "--port", str(port)])
+                return
+            if cmd_type == "PYCUPY_DOWN":
+                _run_pyout_cupy_cli(["down"])
+                return
+            if cmd_type == "PYCUPY_STATUS":
+                _run_pyout_cupy_cli(["status"])
+                return
+            if cmd_type == "PYCUPY_SERVE":
+                host = params[0] if params else DEFAULT_PYOUT_CUPY_HOSTS
+                port = int(params[1]) if len(params) >= 2 else DEFAULT_PYOUT_CUPY_PORT
+                _run_pyout_cupy_cli(["run", "--host", host, "--port", str(port)])
+                return
+            if cmd_type == "PYCUPY_PING":
+                host = params[0] if params else DEFAULT_PYOUT_CUPY_HOSTS
+                port = int(params[1]) if len(params) >= 2 else DEFAULT_PYOUT_CUPY_PORT
+                _run_pyout_cupy_cli(["ping", "--host", host, "--port", str(port)])
+                return
+            if cmd_type == "PYCUPY_ENSURE":
+                host = params[0] if params else DEFAULT_PYOUT_CUPY_HOSTS
+                port = int(params[1]) if len(params) >= 2 else DEFAULT_PYOUT_CUPY_PORT
+                _run_pyout_cupy_cli(["ensure", "--host", host, "--port", str(port)])
+                return
+            if cmd_type == "PY_START_ALL":
+                host = params[0] if params else DEFAULT_PY_BRIDGE_HOSTS
+                port = int(params[1]) if len(params) >= 2 else DEFAULT_PY_BRIDGE_PORT
+                workers = int(params[2]) if len(params) >= 3 else DEFAULT_PYOUT_WORKERS
+                bind_host = _pyout_bind_host(host)
+                _run_pyout_cli_verbose(["down"])
+                _run_pyout_cli_verbose(["up", "--host", bind_host, "--port", str(port), "--workers", str(workers)])
+                print("OK pyout reiniciado (fora do MT5)")
                 return
             if cmd_type == "IND_STFFT":
                 name = params[0] if params else ""
@@ -4113,9 +4369,9 @@ def main():
                 if not target:
                     print("ERROR nome inválido")
                     return
-                svc_mqh = term / "MQL5" / "Services" / "PyInService" / "PyInBridge.mqh"
+                svc_mqh = term / "MQL5" / "Services" / "PyInService" / "PyInClient.mqh"
                 if not svc_mqh.exists():
-                    print("ERROR PyInBridge.mqh não encontrado")
+                    print("ERROR PyInClient.mqh não encontrado")
                     return
                 if target.exists() and not _is_blank_text_file(target):
                     print("ERROR arquivo não está em branco (use outro nome)")
