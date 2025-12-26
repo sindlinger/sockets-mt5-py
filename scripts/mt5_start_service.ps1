@@ -6,6 +6,7 @@ param(
   [string]$StartKey = "i",
   [string]$ServicesLabel = "Services;Serviços;Servicos",
   [string]$StartMenuLabel = "Iniciar;Start",
+  [string]$RefreshMenuLabel = "Atualizar;Refresh",
   [string]$StopMenuLabel = "Parar;Stop",
   [string]$NavigatorLabel = "Navigator;Navegador",
   [switch]$ForceNavigatorFocus = $true,
@@ -112,6 +113,34 @@ function Find-FirstByContainsAny($root, $namePart) {
     if ($el.Current.Name -like "*$namePart*") { return $el }
   }
   return $null
+}
+
+function Invoke-ContextAction($el, $labels, $fallbackKey) {
+  try {
+    $rect = $el.Current.BoundingRectangle
+    if ($rect.Width -gt 0 -and $rect.Height -gt 0) {
+      $cx = [int]($rect.Left + ($rect.Width / 2))
+      $cy = [int]($rect.Top + ($rect.Height / 2))
+      [Win32]::SetCursorPos($cx, $cy) | Out-Null
+      Start-Sleep -Milliseconds 80
+      [Win32]::mouse_event([Win32]::MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, [UIntPtr]::Zero)
+      [Win32]::mouse_event([Win32]::MOUSEEVENTF_RIGHTUP, 0, 0, 0, [UIntPtr]::Zero)
+      Start-Sleep -Milliseconds 200
+    }
+  } catch {}
+  $mi = Find-MenuItemByNameWithin $win $labels $MenuScanTimeoutMs
+  if ($mi) {
+    try {
+      $inv = $mi.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
+      $inv.Invoke()
+      if ($Verbose) { Write-Host "[ok] clique em menu: $($mi.Current.Name)" }
+      return $true
+    } catch {}
+  }
+  if ($fallbackKey -ne "") {
+    try { $wshell.SendKeys($fallbackKey) } catch {}
+  }
+  return $false
 }
 
 function Find-FirstTree($root) {
@@ -306,6 +335,16 @@ if (-not $serviceItem) {
     if (-not $serviceItem) {
       $serviceItem = Find-FirstByContainsAny $servicesItem $ServiceName
     }
+    if (-not $serviceItem) {
+      # tenta refresh do grupo Services
+      $refreshLabels = $RefreshMenuLabel.Split(';') | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
+      $ok = Invoke-ContextAction $servicesItem $refreshLabels "{F5}"
+      Start-Sleep -Milliseconds 400
+      $serviceItem = Find-FirstByContains $servicesItem $ServiceName ([System.Windows.Automation.ControlType]::TreeItem)
+      if (-not $serviceItem) {
+        $serviceItem = Find-FirstByContainsAny $servicesItem $ServiceName
+      }
+    }
   }
 }
 
@@ -355,54 +394,39 @@ try {
   $scr.ScrollIntoView()
 } catch {}
 
-try {
-  $rect = $serviceItem.Current.BoundingRectangle
-  if ($rect.Width -gt 0 -and $rect.Height -gt 0) {
-    $cx = [int]($rect.Left + ($rect.Width / 2))
-    $cy = [int]($rect.Top + ($rect.Height / 2))
-    [Win32]::SetCursorPos($cx, $cy) | Out-Null
-    Start-Sleep -Milliseconds 100
-    [Win32]::mouse_event([Win32]::MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, [UIntPtr]::Zero)
-    [Win32]::mouse_event([Win32]::MOUSEEVENTF_RIGHTUP, 0, 0, 0, [UIntPtr]::Zero)
-    Start-Sleep -Milliseconds 200
-  }
-} catch {}
-
 if ($RequireForeground) {
   $fg = [Win32]::GetForegroundWindow()
   if ($fg -ne $win.Current.NativeWindowHandle) { throw "MT5 perdeu foco antes do menu." }
 }
 
-# abrir menu contexto (fallback)
+# abrir menu contexto/acao
 $wshell = New-Object -ComObject WScript.Shell
-try {
-  $wshell.SendKeys('+{F10}')
-  Start-Sleep -Milliseconds 200
-} catch {}
-
 $act = $Action.ToLower()
 $labels = if ($act -eq "stop") {
   $StopMenuLabel.Split(';') | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
 } else {
   $StartMenuLabel.Split(';') | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
 }
-$mi = Find-MenuItemByNameWithin $win $labels $MenuScanTimeoutMs
-if ($mi) {
-  try {
-    $inv = $mi.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
-    $inv.Invoke()
-    if ($Verbose) { Write-Host "[ok] clique em menu: $($mi.Current.Name)" }
-    exit 0
-  } catch {
-    # fallback abaixo
+$ok = Invoke-ContextAction $serviceItem $labels $StartKey
+if (-not $ok) {
+  try { $wshell.SendKeys('+{F10}') } catch {}
+  Start-Sleep -Milliseconds 200
+  $mi = Find-MenuItemByNameWithin $win $labels $MenuScanTimeoutMs
+  if ($mi) {
+    try {
+      $inv = $mi.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
+      $inv.Invoke()
+    } catch {}
   }
 }
 
 # fallback: tecla
-if ($act -eq "stop" -and $StopKey -ne "") {
-  $wshell.SendKeys($StopKey)
-  if ($Verbose) { Write-Host "[ok] stop enviado (tecla $StopKey)" }
-} else {
-  $wshell.SendKeys($StartKey)
-  if ($Verbose) { Write-Host "[ok] start enviado (tecla $StartKey)" }
+if (-not $ok) {
+  if ($act -eq "stop" -and $StopKey -ne "") {
+    $wshell.SendKeys($StopKey)
+    if ($Verbose) { Write-Host "[ok] stop enviado (tecla $StopKey)" }
+  } else {
+    $wshell.SendKeys($StartKey)
+    if ($Verbose) { Write-Host "[ok] start enviado (tecla $StartKey)" }
+  }
 }
