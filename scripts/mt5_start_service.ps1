@@ -79,6 +79,11 @@ function Find-FirstByContains($root, $namePart, $controlType) {
   return $null
 }
 
+function Find-FirstTree($root) {
+  $condType = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Tree)
+  return $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condType)
+}
+
 function Find-MenuItemByNameWithin($win, $labels, $timeoutMs) {
   $deadline = (Get-Date).AddMilliseconds($timeoutMs)
   while ((Get-Date) -lt $deadline) {
@@ -155,6 +160,8 @@ if (-not $win) {
 }
 
 [Win32]::SetForegroundWindow($win.Current.NativeWindowHandle) | Out-Null
+$wshell = New-Object -ComObject WScript.Shell
+try { $wshell.AppActivate($win.Current.Name) | Out-Null } catch {}
 
 if ($RequireForeground) {
   $start = Get-Date
@@ -180,7 +187,6 @@ if (-not $nav) {
     if ($fg -ne $win.Current.NativeWindowHandle) { throw "MT5 perdeu foco antes do Ctrl+N." }
   }
   # abre Navigator via Ctrl+N (toggle) e verifica
-  $wshell = New-Object -ComObject WScript.Shell
   $wshell.SendKeys('^n')
   Start-Sleep -Milliseconds 300
   $nav = Find-Navigator $win $navLabels
@@ -194,15 +200,20 @@ if (-not $nav) {
 
 # se ainda nao achou, tenta um ultimo toggle
 if (-not $nav) {
-  $wshell = New-Object -ComObject WScript.Shell
   $wshell.SendKeys('^n')
   Start-Sleep -Milliseconds 400
   $nav = Find-Navigator $win $navLabels
 }
 
 if (-not $nav) {
-  if ($Verbose) { Write-Host "Navigator nao encontrado. Tentando buscar no root." -ForegroundColor Yellow }
-  $nav = $win
+  $tree = Find-FirstTree $win
+  if ($tree) {
+    if ($Verbose) { Write-Host "Navigator nao encontrado. Usando Tree principal." -ForegroundColor Yellow }
+    $nav = $tree
+  } else {
+    if ($Verbose) { Write-Host "Navigator nao encontrado. Tentando buscar no root." -ForegroundColor Yellow }
+    $nav = $win
+  }
 }
 
 # força foco no Navigator (pane)
