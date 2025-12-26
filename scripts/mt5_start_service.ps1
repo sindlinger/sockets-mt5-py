@@ -27,6 +27,10 @@ public static class Win32 {
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll", SetLastError=true, CharSet=CharSet.Auto)]
   public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+  [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y);
+  [DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, UIntPtr dwExtraInfo);
+  public const uint MOUSEEVENTF_RIGHTDOWN = 0x0008;
+  public const uint MOUSEEVENTF_RIGHTUP = 0x0010;
 }
 "@
 
@@ -346,16 +350,35 @@ try {
   $sel.Select()
 } catch {}
 try { $serviceItem.SetFocus() } catch {}
+try {
+  $scr = $serviceItem.GetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern)
+  $scr.ScrollIntoView()
+} catch {}
+
+try {
+  $rect = $serviceItem.Current.BoundingRectangle
+  if ($rect.Width -gt 0 -and $rect.Height -gt 0) {
+    $cx = [int]($rect.Left + ($rect.Width / 2))
+    $cy = [int]($rect.Top + ($rect.Height / 2))
+    [Win32]::SetCursorPos($cx, $cy) | Out-Null
+    Start-Sleep -Milliseconds 100
+    [Win32]::mouse_event([Win32]::MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, [UIntPtr]::Zero)
+    [Win32]::mouse_event([Win32]::MOUSEEVENTF_RIGHTUP, 0, 0, 0, [UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 200
+  }
+} catch {}
 
 if ($RequireForeground) {
   $fg = [Win32]::GetForegroundWindow()
   if ($fg -ne $win.Current.NativeWindowHandle) { throw "MT5 perdeu foco antes do menu." }
 }
 
-# abrir menu contexto
+# abrir menu contexto (fallback)
 $wshell = New-Object -ComObject WScript.Shell
-$wshell.SendKeys('+{F10}')
-Start-Sleep -Milliseconds 200
+try {
+  $wshell.SendKeys('+{F10}')
+  Start-Sleep -Milliseconds 200
+} catch {}
 
 $act = $Action.ToLower()
 $labels = if ($act -eq "stop") {
