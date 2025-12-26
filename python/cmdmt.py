@@ -2338,48 +2338,6 @@ def run_mt5_tester(tokens):
         print(f"run_log: {run_log}")
     return True
 
-def _split_hosts(hosts: str):
-    return [h.strip() for h in hosts.replace(";", ",").split(",") if h.strip()]
-
-def _send_text_to_hosts(hosts: str, port: int, line: str, timeout: float = 3.0):
-    if not line.endswith("\n"):
-        line += "\n"
-    last_err = None
-    for host in _split_hosts(hosts):
-        try:
-            with socket.create_connection((host, port), timeout=timeout) as s:
-                s.sendall(line.encode("utf-8"))
-                data = b""
-                while True:
-                    chunk = s.recv(4096)
-                    if not chunk:
-                        break
-                    data += chunk
-                    if b"\n" in data:
-                        break
-                return data.decode("utf-8", errors="ignore")
-        except Exception as e:
-            last_err = e
-            continue
-    if last_err:
-        raise last_err
-    raise RuntimeError("sem host disponível")
-
-def _ping_service(hosts: str, port: int, timeout: float = 2.0):
-    try:
-        resp = _send_text_to_hosts(hosts, port, f"{gen_id()}|PING", timeout=timeout)
-        return True, resp.strip()
-    except Exception as e:
-        return False, str(e)
-
-def _ping_pybridge(hosts: str, port: int, timeout: float = 2.0):
-    try:
-        payload = json.dumps({"cmd": "ping"})
-        resp = _send_text_to_hosts(hosts, port, payload, timeout=timeout)
-        return True, resp.strip()
-    except Exception as e:
-        return False, str(e)
-
 def _state_dir():
     base = os.environ.get("CMDMT_HOME")
     if base:
@@ -2487,6 +2445,22 @@ def _run_pyout_cupy_cli_verbose(args: list[str]) -> bool:
     ok = _run_pyout_cupy_cli(args)
     print(f"[pyout_cupy_cli] rc={'0' if ok else '1'}")
     return ok
+
+def _pyin_cli_path():
+    base = Path(__file__).resolve().parent.parent
+    return base / "PyMql-CodeBridge" / "pyin" / "pyin_client.py"
+
+def _run_pyin_cli(args: list[str]) -> bool:
+    path = _pyin_cli_path()
+    if not path.exists():
+        print("ERROR pyin_client.py nao encontrado")
+        return False
+    cmd = [sys.executable, str(path)] + args
+    try:
+        return subprocess.call(cmd) == 0
+    except Exception as e:
+        print(f"falha ao executar pyin_client: {e}")
+        return False
 
 def _pyout_bind_host(hosts: str) -> str:
     h = (hosts or "").strip()
@@ -4329,8 +4303,7 @@ def main():
             if cmd_type == "PYSERVICE_PING":
                 host = params[0] if params else DEFAULT_PY_SERVICE_HOSTS
                 port = int(params[1]) if len(params) >= 2 else DEFAULT_PY_SERVICE_PORT
-                okp, info = _ping_service(host, port)
-                print(("OK " if okp else "ERROR ") + info)
+                _run_pyin_cli(["--host", host, "--port", str(port), "--timeout", str(args.timeout), "ping"])
                 return
             if cmd_type == "PYSERVICE_CMD":
                 if not params:
@@ -4338,13 +4311,7 @@ def main():
                     return
                 host = DEFAULT_PY_SERVICE_HOSTS
                 port = DEFAULT_PY_SERVICE_PORT
-                line_out = "|".join([gen_id(), params[0]] + params[1:])
-                try:
-                    resp_txt = _send_text_to_hosts(host, port, line_out, timeout=args.timeout)
-                except Exception as e:
-                    print(f"ERROR: conexão falhou ({e})")
-                    return
-                print(resp_txt.strip())
+                _run_pyin_cli(["--host", host, "--port", str(port), "--timeout", str(args.timeout), "cmd", params[0]] + params[1:])
                 return
             if cmd_type == "PYSERVICE_RAW":
                 if not params:
@@ -4352,12 +4319,7 @@ def main():
                     return
                 host = DEFAULT_PY_SERVICE_HOSTS
                 port = DEFAULT_PY_SERVICE_PORT
-                try:
-                    resp_txt = _send_text_to_hosts(host, port, params[0], timeout=args.timeout)
-                except Exception as e:
-                    print(f"ERROR: conexão falhou ({e})")
-                    return
-                print(resp_txt.strip())
+                _run_pyin_cli(["--host", host, "--port", str(port), "--timeout", str(args.timeout), "raw", params[0]])
                 return
             if cmd_type == "PYBRIDGE_START":
                 pybridge_start()
