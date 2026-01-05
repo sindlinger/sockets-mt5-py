@@ -7,6 +7,7 @@ CMD MT – CLI interativo unificado
 
 Comandos:
   help
+  exemplos [cmd]
   ping
   debug MSG
   use SYMBOL TF            (define contexto padrão)
@@ -21,17 +22,17 @@ Comandos:
   savetpl [SYMBOL] [TF] TEMPLATE
   closechart [SYMBOL] [TF]
   closeall
-  attachind [SYMBOL] [TF] NAME [SUB|sub=N] [k=v ...] [-- k=v ...]
-  detachind [SYMBOL] [TF] NAME [SUB|sub=N]
+  attach (att) ind [SYMBOL] [TF] NAME [SUB|sub=N] [k=v ...] [-- k=v ...]
+  deattach (dtt) ind [SYMBOL] [TF] NAME [SUB|sub=N]
   indtotal [SYMBOL] [TF] [SUB]
   indname [SYMBOL] [TF] [SUB] INDEX
   indhandle [SYMBOL] [TF] [SUB] NAME
   indget [SYMBOL] [TF] [SUB] SHORTNAME
   indrelease HANDLE
   findea NOME
-  attachea [SYMBOL] [TF] NAME [k=v ...] [-- k=v ...]
-  detachea
-  runscript [SYMBOL] [TF] TEMPLATE
+  attach (att) ea [SYMBOL] [TF] NAME [k=v ...] [-- k=v ...]
+  deattach (dtt) ea [SYMBOL] [TF]
+  attach (att) run [SYMBOL] [TF] TEMPLATE
   gset NAME VALUE
   gget NAME
   gdel NAME
@@ -43,18 +44,11 @@ Comandos:
   compile here
   service start NOME
   service stop NOME
+  service windows
   hotkeys / hotkey
   tester [--root PATH] [--ini FILE] [--timeout SEC] [--width W --height H] [--minimized|--headless] (default 640x480)
   run NOME --ind|--ea [SYMBOL] [TF] [3 dias] [--predownload] [--logtail N] [--quiet] (tester simples)
   logs [last|ARQUIVO.log] [N] (listar/mostrar logs do run)
-  logs pyout|pyin|cupy [--server|--client] [--cupy|--pyout] [N] [filtro...] [--follow]
-  py PAYLOAD               (PY_CALL)
-  py start all [host] [port] [workers|--workers N]  (reinicia PyOut fora do MT5; host com lista -> bind 0.0.0.0)
-  py server all [host] [port] [workers|--workers N] (reinicia PyOut fora do MT5; host com lista -> bind 0.0.0.0)
-  py start [pyout|cupy] all [host] [port] [workers|--workers N]
-  py server [pyout|cupy] <up|down|status|ping|ensure|serve|all> [host] [port] [workers|--workers N] [--cupy|--pyout]
-  py cupy <up|down|status|ping|ensure|serve> [host] [port]  (PyOut CuPy)
-  py ping|ensure|status [--cupy|--pyout] [host] [port]
   cmd TYPE [PARAMS...]     (envia TYPE direto)
   selftest [full]          (smoke test do serviço)
   raw <linha>
@@ -126,6 +120,41 @@ def to_windows_path(p: str) -> str:
             return p
     return p
 
+def _wsl_host_ip() -> str:
+    try:
+        if os.name == "nt":
+            return ""
+        ver = Path("/proc/version")
+        if not ver.exists():
+            return ""
+        if "microsoft" not in ver.read_text().lower():
+            return ""
+        # prefer default gateway from /proc/net/route
+        route = Path("/proc/net/route")
+        if route.exists():
+            for line in route.read_text().splitlines()[1:]:
+                cols = line.split()
+                if len(cols) >= 3 and cols[1] == "00000000":
+                    gw_hex = cols[2]
+                    try:
+                        gw = int(gw_hex, 16)
+                        ip = ".".join(str((gw >> (8 * i)) & 0xFF) for i in range(4))
+                        if ip and ip != "0.0.0.0":
+                            return ip
+                    except Exception:
+                        pass
+        resolv = Path("/etc/resolv.conf")
+        if not resolv.exists():
+            return ""
+        for line in resolv.read_text().splitlines():
+            if line.startswith("nameserver"):
+                parts = line.split()
+                if len(parts) >= 2 and parts[1] != "127.0.0.1":
+                    return parts[1]
+    except Exception:
+        return ""
+    return ""
+
 def gen_id() -> str:
     return f"{int(time.time()*1000)}_{random.randint(1000,9999)}"
 
@@ -192,50 +221,17 @@ def _parse_host_port_workers(args, default_hosts, default_port, default_workers)
     host, port = _parse_host_port(args2, default_hosts, default_port)
     return host, port, workers
 
-def _pop_py_target(args, default="pyout"):
-    """Retorna (target, args_sem_target). target in {'pyout','cupy'}."""
-    target = default
-    args2 = list(args)
-    if args2:
-        cleaned = []
-        for tok in args2:
-            low = tok.lower()
-            if low == "--cupy":
-                target = "cupy"
-                continue
-            if low == "--pyout":
-                target = "pyout"
-                continue
-            cleaned.append(tok)
-        args2 = cleaned
-    for flag in ("--target", "--cli", "--impl"):
-        if flag in args2:
-            idx = args2.index(flag)
-            if idx + 1 < len(args2):
-                cand = args2[idx + 1].lower()
-                if cand in ("pyout", "cupy"):
-                    target = cand
-                del args2[idx:idx + 2]
-            break
-    if args2 and args2[0].lower() in ("pyout", "cupy"):
-        target = args2[0].lower()
-        args2 = args2[1:]
-    return target, args2
-
 DEFAULT_SYMBOL = "EURUSD"
 DEFAULT_TF = "H1"
 DEFAULT_EA_BASE_TPL = "Moving Average.tpl"
 DEBUG_TPL_ENV = "CMDMT_DEBUG_TPL"
 DEFAULT_HOSTS = "host.docker.internal,127.0.0.1"
+_wsl_ip = _wsl_host_ip()
+if _wsl_ip:
+    DEFAULT_HOSTS = f"{_wsl_ip},{DEFAULT_HOSTS}"
 DEFAULT_PORT = 9090
-# serviço Python-only (MT5) e Python-Bridge
-DEFAULT_PY_SERVICE_HOSTS = os.environ.get("CMDMT_PY_SERVICE_HOSTS", DEFAULT_HOSTS)
-DEFAULT_PY_SERVICE_PORT = int(os.environ.get("CMDMT_PY_SERVICE_PORT", "9091"))
-DEFAULT_PY_BRIDGE_HOSTS = os.environ.get("CMDMT_PY_BRIDGE_HOSTS", DEFAULT_HOSTS)
-DEFAULT_PY_BRIDGE_PORT = int(os.environ.get("CMDMT_PY_BRIDGE_PORT", "9100"))
-DEFAULT_PYOUT_WORKERS = int(os.environ.get("CMDMT_PYOUT_WORKERS", os.environ.get("PYOUT_WORKERS", "2")))
-DEFAULT_PYOUT_CUPY_HOSTS = os.environ.get("CMDMT_PYOUT_CUPY_HOSTS", DEFAULT_HOSTS)
-DEFAULT_PYOUT_CUPY_PORT = int(os.environ.get("CMDMT_PYOUT_CUPY_PORT", "9200"))
+# automação de serviços
+CMDMT_SERVICE_AUTO_COMPILE = os.environ.get("CMDMT_SERVICE_AUTO_COMPILE", "1") != "0"
 # handshake desabilitado por padrão (conexão direta no serviço)
 CMDMT_HELLO_ENABLED = os.environ.get("CMDMT_HELLO", "0") != "0"
 CMDMT_HELLO_LINE = os.environ.get("CMDMT_HELLO_LINE", "HELLO CMDMT")
@@ -595,6 +591,62 @@ def run_mt5_compile(target: str):
             print("  " + ln)
     return True
 
+def _compile_log_has_errors(txt: str) -> bool:
+    if not txt:
+        return False
+    # procura "Result: X errors"
+    for ln in txt.splitlines():
+        low = ln.lower()
+        if "result:" in low and "error" in low:
+            m = re.search(r"(\\d+)\\s+error", low)
+            if m:
+                try:
+                    return int(m.group(1)) > 0
+                except Exception:
+                    return True
+    # fallback: linhas com " error" (sem ser 0)
+    for ln in txt.splitlines():
+        low = ln.lower()
+        if " error" in low and " 0 error" not in low:
+            return True
+    return False
+
+def _find_service_mq5(name: str, term: Path):
+    hits = resolve_mql5_candidates(name, term)
+    if not hits:
+        return None
+    for p in hits:
+        if "Services" in p.parts:
+            return p
+    return hits[0]
+
+def ensure_service_compiled(name: str) -> bool:
+    term = find_terminal_data_dir()
+    if not term:
+        print("não encontrei o Terminal do MT5. Defina CMDMT_MT5_DATA ou MT5_DATA_DIR.")
+        return False
+    svc = _find_service_mq5(name, term)
+    if not svc or not svc.exists():
+        print("serviço .mq5 não encontrado.")
+        return False
+    ex5 = svc.with_suffix(".ex5")
+    need_compile = (not ex5.exists()) or (ex5.stat().st_mtime < svc.stat().st_mtime)
+    if not need_compile:
+        return True
+    print("compilando serviço:", svc)
+    ok = run_mt5_compile(str(svc))
+    if not ok:
+        return False
+    # verifica ex5 e log
+    if not ex5.exists():
+        print("compilação falhou: EX5 não foi gerado.")
+        return False
+    log_txt = read_compile_log(Path(os.getcwd()) / "mt5-compile.log")
+    if _compile_log_has_errors(log_txt):
+        print("compilação com erros. Verifique mt5-compile.log")
+        return False
+    return True
+
 def run_mt5_compile_service():
     term = find_terminal_data_dir()
     if not term:
@@ -628,12 +680,24 @@ def run_mt5_start_service(name: str):
     if not script.exists():
         print("script de start não encontrado: scripts/mt5_start_service.sh")
         return False
-    svc = (name or "").strip().strip('"').strip("'")
+    svc = (name or "").strip()
     if not svc:
         print("uso: service start NOME")
         return False
+    tokens = shlex.split(svc)
+    svc_name = tokens[0] if tokens else ""
+    extra = tokens[1:] if len(tokens) > 1 else []
+    if not svc_name:
+        print("uso: service start NOME")
+        return False
+    if CMDMT_SERVICE_AUTO_COMPILE:
+        if not ensure_service_compiled(svc_name):
+            return False
     try:
-        subprocess.run([str(script), svc, "Start"], check=False)
+        env = os.environ.copy()
+        if extra:
+            env["UIA_ARGS"] = " ".join(extra)
+        subprocess.run([str(script), svc_name, "Start"], env=env, check=False)
         return True
     except Exception as e:
         print(f"falha ao iniciar serviço: {e}")
@@ -645,32 +709,42 @@ def run_mt5_stop_service(name: str):
     if not script.exists():
         print("script de stop não encontrado: scripts/mt5_start_service.sh")
         return False
-    svc = (name or "").strip().strip('"').strip("'")
+
+def run_mt5_list_service_windows():
+    base = Path(__file__).resolve().parent.parent
+    script = base / "scripts" / "mt5_start_service.sh"
+    if not script.exists():
+        print("script de listagem não encontrado: scripts/mt5_start_service.sh")
+        return False
+    try:
+        subprocess.run([str(script), "SocketTelnetService", "List"], check=False)
+        return True
+    except Exception as e:
+        print(f"falha ao listar janelas: {e}")
+        return False
+    svc = (name or "").strip()
     if not svc:
         print("uso: service stop NOME")
         return False
+    tokens = shlex.split(svc)
+    svc_name = tokens[0] if tokens else ""
+    extra = tokens[1:] if len(tokens) > 1 else []
+    if not svc_name:
+        print("uso: service stop NOME")
+        return False
     try:
-        subprocess.run([str(script), svc, "Stop"], check=False)
+        env = os.environ.copy()
+        if extra:
+            env["UIA_ARGS"] = " ".join(extra)
+        subprocess.run([str(script), svc_name, "Stop"], env=env, check=False)
         return True
     except Exception as e:
         print(f"falha ao parar serviço: {e}")
         return False
 
-def run_mt5_compile_pyservice():
-    term = find_terminal_data_dir()
-    if not term:
-        print("não encontrei o Terminal do MT5. Defina CMDMT_MT5_DATA ou MT5_DATA_DIR.")
-        return False
-    svc_server = term / "MQL5" / "Services" / "PyInServerService.mq5"
-    if not svc_server.exists():
-        print("serviço PyInServer não encontrado. Informe o caminho completo.")
-        return False
-    return run_mt5_compile(str(svc_server))
 
 def run_mt5_compile_all_services():
-    ok1 = run_mt5_compile_service()
-    ok2 = run_mt5_compile_pyservice()
-    return ok1 and ok2
+    return run_mt5_compile_service()
 
 def _read_text_auto(path: Path):
     data = path.read_bytes()
@@ -1165,25 +1239,6 @@ def _show_run_log(name=None, tail=200):
     lines = _tail_lines(path, tail)
     _print_block(f"log: {path}", lines)
 
-def _latest_pyout_log():
-    run_dir = _ensure_run_logs_dir()
-    logs = []
-    logs += list(run_dir.glob("pyout_*.log"))
-    logs += list(run_dir.glob("pyout_server*.log"))
-    logs += list(run_dir.glob("pyout.log"))
-    if not logs:
-        return None
-    return max(logs, key=lambda p: p.stat().st_mtime)
-
-def _latest_pyout_cupy_log():
-    run_dir = _ensure_run_logs_dir()
-    logs = []
-    logs += list(run_dir.glob("pyout_cupy_*.log"))
-    logs += list(run_dir.glob("pyout_cupy.log"))
-    if not logs:
-        return None
-    return max(logs, key=lambda p: p.stat().st_mtime)
-
 def _follow_file(path: Path, include=None, exclude=None):
     try:
         with path.open("r", encoding="utf-8", errors="ignore") as f:
@@ -1224,40 +1279,6 @@ def _show_mt5_log_filtered(term: Path, title: str, tail: int, include=None, excl
         print("logs MT5 não encontrados")
         return
     _show_file_filtered(log_path, title, tail, include=include, exclude=exclude, follow=follow)
-
-def _show_pyout_logs(mode: str, tail: int, filters=None, follow=False):
-    if mode == "client":
-        term = find_terminal_data_dir()
-        include = filters or ["pyout"]
-        _show_mt5_log_filtered(term, "pyout client (mt5)", tail, include=include, follow=follow)
-        return
-    path = _latest_pyout_log()
-    if not path:
-        print("pyout log não encontrado em run_logs")
-        return
-    _show_file_filtered(path, "pyout server", tail, include=filters, follow=follow)
-
-def _show_pyin_logs(mode: str, tail: int, filters=None, follow=False):
-    term = find_terminal_data_dir()
-    if mode == "client":
-        include = filters or ["pyinclient", "[pyinclient]"]
-        _show_mt5_log_filtered(term, "pyin client (mt5)", tail, include=include, follow=follow)
-        return
-    include = filters or ["pyinserver", "[pyinserver]"]
-    _show_mt5_log_filtered(term, "pyin server (mt5)", tail, include=include, follow=follow)
-
-def _show_cupy_logs(mode: str, tail: int, filters=None, follow=False):
-    if mode == "server":
-        path = _latest_pyout_cupy_log()
-        if not path:
-            print("pyout_cupy log não encontrado em run_logs")
-            return
-        _show_file_filtered(path, "pyout_cupy server", tail, include=filters, follow=follow)
-        return
-    # client side: MT5 service/indicator logs
-    term = find_terminal_data_dir()
-    include = filters or ["pyincupyservicebridge", "[pyincupyservicebridge]", "cupy"]
-    _show_mt5_log_filtered(term, "pyout_cupy client (mt5)", tail, include=include, follow=follow)
 
 def _normalize_prog_name(name):
     name = name.strip().strip('"').strip("'")
@@ -1554,7 +1575,7 @@ def _compile_mq5_path(src: Path) -> bool:
         return False
     return True
 
-def _prepare_external_file(src_path: Path, data_dir: Path, target_kind: str):
+def _prepare_external_file(src_path: Path, data_dir: Path, target_kind: str, prefer_link: bool = False):
     # target_kind: "Indicators" or "Experts"
     cleanup = []
     src_path = Path(src_path)
@@ -1584,8 +1605,11 @@ def _prepare_external_file(src_path: Path, data_dir: Path, target_kind: str):
                 pass
             else:
                 if not dst_existed:
-                    cleanup.append((dst_dir, "copydir"))
-                shutil.copytree(src_path.parent, dst_dir, dirs_exist_ok=True)
+                    if prefer_link and _safe_symlink(src_path.parent, dst_dir):
+                        cleanup.append((dst_dir, "linkdir"))
+                    else:
+                        cleanup.append((dst_dir, "copydir"))
+                        shutil.copytree(src_path.parent, dst_dir, dirs_exist_ok=True)
         except Exception as e:
             print("ERROR não foi possível copiar diretório: " + str(e))
             return None, cleanup
@@ -1606,8 +1630,11 @@ def _prepare_external_file(src_path: Path, data_dir: Path, target_kind: str):
             pass
         else:
             if not dst_existed:
-                cleanup.append((dst, "copyfile"))
-            shutil.copy2(src_path, dst)
+                if prefer_link and _safe_symlink(src_path, dst):
+                    cleanup.append((dst, "linkfile"))
+                else:
+                    cleanup.append((dst, "copyfile"))
+                    shutil.copy2(src_path, dst)
 
     # if mq5, compile in place
     if dst.suffix.lower() == ".mq5":
@@ -1625,6 +1652,67 @@ def _prepare_external_file(src_path: Path, data_dir: Path, target_kind: str):
             print("ERROR compilação falhou para " + str(dst))
             return None, cleanup
     return rel_name, cleanup
+
+def _rel_name_if_inside(path: Path, term_dir: Path, kind: str) -> str | None:
+    try:
+        base = (Path(term_dir) / "MQL5" / kind).resolve()
+        p_res = path.resolve()
+    except Exception:
+        base = Path(term_dir) / "MQL5" / kind
+        p_res = path
+    base_s = str(base).replace("\\", "/").lower().rstrip("/")
+    p_s = str(p_res).replace("\\", "/").lower()
+    if p_s.startswith(base_s + "/"):
+        try:
+            rel = os.path.relpath(str(p_res), str(base))
+        except Exception:
+            rel = str(p_res)[len(str(base)) + 1:]
+        return _strip_ext(rel.replace("/", "\\"))
+    return None
+
+def _resolve_attach_indicator_name(raw_name: str, term_dir: Path):
+    raw = raw_name.strip().strip('"').strip("'")
+    if not raw:
+        return None, "nome vazio"
+    # nome simples (sem caminho): mantém como está (apenas remove extensão se houver)
+    if not _is_path_intent(raw) and not raw.lower().endswith((".mq5", ".ex5")):
+        return raw, None
+    # com extensão mas sem caminho: só remove extensão
+    if not _is_path_intent(raw) and raw.lower().endswith((".mq5", ".ex5")):
+        return _strip_ext(raw), None
+
+    # caminho explícito
+    if _is_path_intent(raw):
+        cand = Path(maybe_wslpath(raw))
+        if cand.is_absolute() and cand.exists():
+            rel = _rel_name_if_inside(cand, term_dir, "Indicators")
+            if rel:
+                return rel, None
+            rel_name, _ = _prepare_external_file(cand, term_dir, "Indicators", prefer_link=True)
+            if rel_name:
+                return rel_name, None
+            return None, "falha ao copiar/linkar indicador para o terminal"
+
+        # relativo ao MQL5
+        t = raw.replace("/", "\\")
+        if t.lower().startswith("mql5\\"):
+            t = t[5:]
+        if t.lower().startswith("indicators\\"):
+            t = t[len("indicators\\"):]
+        t = _strip_ext(t)
+        src, rel = _find_prog_in_terminal("Indicators", t, term_dir)
+        if src and rel:
+            return rel, None
+
+        # tenta resolver como caminho relativo ao cwd
+        p2 = _resolve_user_path(raw)
+        if p2 and p2.exists():
+            rel_name, _ = _prepare_external_file(p2, term_dir, "Indicators", prefer_link=True)
+            if rel_name:
+                return rel_name, None
+        return None, f"arquivo não encontrado: {raw}"
+
+    return raw, None
 
 def _parse_days(tokens):
     num_words = {
@@ -2468,93 +2556,6 @@ def _normalize_hotkey_name(name: str) -> str:
         n = n[1:]
     return n.strip().upper()
 
-def _pybridge_pid_path():
-    return _state_dir() / "pybridge.pid"
-
-def _pid_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-        return True
-    except Exception:
-        return False
-
-def _pyout_cli_path():
-    base = Path(__file__).resolve().parent.parent
-    return base / "PyMql-CodeBridge" / "pyout" / "pyout_cli.py"
-
-def _run_pyout_cli(args: list[str]) -> bool:
-    path = _pyout_cli_path()
-    if not path.exists():
-        print("ERROR pyout_cli.py não encontrado")
-        return False
-    cmd = [sys.executable, str(path)] + args
-    try:
-        return subprocess.call(cmd) == 0
-    except Exception as e:
-        print(f"falha ao executar pyout_cli: {e}")
-        return False
-
-def _run_pyout_cli_verbose(args: list[str]) -> bool:
-    print(f"[pyout_cli] {' '.join(args)}")
-    ok = _run_pyout_cli(args)
-    print(f"[pyout_cli] rc={'0' if ok else '1'}")
-    return ok
-
-def _pyout_cupy_cli_path():
-    base = Path(__file__).resolve().parent.parent
-    return base / "PyMql-CodeBridge" / "pyout_cupy" / "pyout_cupy_cli.py"
-
-def _run_pyout_cupy_cli(args: list[str]) -> bool:
-    path = _pyout_cupy_cli_path()
-    if not path.exists():
-        print("ERROR pyout_cupy_cli.py nao encontrado")
-        return False
-    cmd = [sys.executable, str(path)] + args
-    try:
-        return subprocess.call(cmd) == 0
-    except Exception as e:
-        print(f"falha ao executar pyout_cupy_cli: {e}")
-        return False
-
-def _run_pyout_cupy_cli_verbose(args: list[str]) -> bool:
-    print(f"[pyout_cupy_cli] {' '.join(args)}")
-    ok = _run_pyout_cupy_cli(args)
-    print(f"[pyout_cupy_cli] rc={'0' if ok else '1'}")
-    return ok
-
-def _pyin_cli_path():
-    base = Path(__file__).resolve().parent.parent
-    return base / "PyMql-CodeBridge" / "pyin" / "pyin_client.py"
-
-def _run_pyin_cli(args: list[str]) -> bool:
-    path = _pyin_cli_path()
-    if not path.exists():
-        print("ERROR pyin_client.py nao encontrado")
-        return False
-    cmd = [sys.executable, str(path)] + args
-    try:
-        return subprocess.call(cmd) == 0
-    except Exception as e:
-        print(f"falha ao executar pyin_client: {e}")
-        return False
-
-def _pyout_bind_host(hosts: str) -> str:
-    h = (hosts or "").strip()
-    if not h:
-        return "0.0.0.0"
-    if "," in h or ";" in h:
-        return "0.0.0.0"
-    return h
-
-def pybridge_start():
-    return _run_pyout_cli(["start"])
-
-def pybridge_stop():
-    return _run_pyout_cli(["stop"])
-
-def pybridge_status():
-    return _run_pyout_cli(["status"])
-
 def resolve_expert_path(terminal_dir: Path, expert_name: str) -> str:
     name = expert_name.strip().replace("/", "\\")
     # if absolute path includes MQL5\Experts\, keep only relative part
@@ -2929,6 +2930,149 @@ class TransportSocket:
             return {"ok": False, "error": resp.strip()}
 
 # ------------------- Parsing de comandos -------------------
+def _cmd_attachind_args(r, ctx):
+    r = list(r)
+    sym = None; tf = None
+    if len(r) >= 2 and is_tf(r[1]):
+        sym = r[0]; tf = r[1]; r = r[2:]
+    elif len(r) >= 1 and is_tf(r[0]) and ctx.get("symbol"):
+        sym = ctx.get("symbol"); tf = r[0]; r = r[1:]
+    else:
+        # usa defaults; não interpreta o primeiro token como símbolo
+        sym = ctx.get("symbol"); tf = ctx.get("tf")
+    if not ensure_ctx(ctx, not sym, not tf):
+        return None
+    if not r:
+        print("uso: attach ind [SYMBOL] [TF] NAME [SUB|sub=N] [-- k=v ...]")
+        return None
+    # allow params after "--"
+    params_tokens = []
+    if "--" in r:
+        idx = r.index("--")
+        params_tokens = r[idx+1:]
+        r = r[:idx]
+    else:
+        for i, tok in enumerate(r):
+            if "=" in tok and not tok.lower().startswith("sub="):
+                params_tokens = r[i:]
+                r = r[:i]
+                break
+    # explicit sub token
+    sub = str(ctx.get("sub", 1))
+    sub_idx = None
+    for i, tok in enumerate(r):
+        low = tok.lower()
+        if low.startswith("sub="):
+            sub = tok.split("=", 1)[1]; sub_idx = i; break
+        if (tok.startswith("@") or tok.startswith("#")) and tok[1:].isdigit():
+            sub = tok[1:]; sub_idx = i; break
+    if sub_idx is not None:
+        r = r[:sub_idx] + r[sub_idx+1:]
+    elif len(r) >= 2 and r[-1].isdigit():
+        # mantém compatibilidade com "NOME SUB"
+        sub = r[-1]; r = r[:-1]
+    elif len(r) == 1 and r[0].isdigit():
+        print("uso: attach ind [SYMBOL] [TF] NAME [SUB|sub=N] [-- k=v ...]")
+        return None
+    name = " ".join(r)
+    # se veio caminho (WSL/Windows), prepara e converte para path relativo do terminal
+    if _is_path_intent(name) or name.lower().endswith((".mq5", ".ex5")):
+        term = find_terminal_data_dir()
+        if not term:
+            print("erro: não encontrei o Terminal do MT5 (CMDMT_MT5_DATA/MT5_DATA_DIR)")
+            return None
+        resolved, err = _resolve_attach_indicator_name(name, term)
+        if not resolved:
+            print("erro: " + (err or "indicador não encontrado"))
+            return None
+        name = resolved
+    params_str = ";".join(params_tokens) if params_tokens else ""
+    payload = [sym, tf, name, sub]
+    if params_str:
+        payload.append(params_str)
+    return "ATTACH_IND_FULL", payload
+
+def _cmd_detachind_args(r, ctx):
+    r = list(r)
+    sym = None; tf = None
+    if len(r) >= 2 and is_tf(r[1]):
+        sym = r[0]; tf = r[1]; r = r[2:]
+    elif len(r) >= 1 and is_tf(r[0]) and ctx.get("symbol"):
+        sym = ctx.get("symbol"); tf = r[0]; r = r[1:]
+    else:
+        # usa defaults; não interpreta o primeiro token como símbolo
+        sym = ctx.get("symbol"); tf = ctx.get("tf")
+    if not ensure_ctx(ctx, not sym, not tf):
+        return None
+    if not r:
+        print("uso: deattach ind [SYMBOL] [TF] NAME [SUB|sub=N]")
+        return None
+    sub = str(ctx.get("sub", 1))
+    sub_idx = None
+    for i, tok in enumerate(r):
+        low = tok.lower()
+        if low.startswith("sub="):
+            sub = tok.split("=", 1)[1]; sub_idx = i; break
+        if (tok.startswith("@") or tok.startswith("#")) and tok[1:].isdigit():
+            sub = tok[1:]; sub_idx = i; break
+    if sub_idx is not None:
+        r = r[:sub_idx] + r[sub_idx+1:]
+    elif len(r) >= 2 and r[-1].isdigit():
+        sub = r[-1]; r = r[:-1]
+    elif len(r) == 1 and r[0].isdigit():
+        print("uso: deattach ind [SYMBOL] [TF] NAME [SUB|sub=N]")
+        return None
+    name = " ".join(r)
+    return "DETACH_IND_FULL", [sym, tf, name, sub]
+
+def _cmd_attachea_args(r, ctx):
+    r = list(r)
+    sym = None; tf = None
+    if len(r) >= 2 and is_tf(r[1]):
+        sym = r[0]; tf = r[1]; r = r[2:]
+    elif len(r) >= 1 and is_tf(r[0]) and ctx.get("symbol"):
+        sym = ctx.get("symbol"); tf = r[0]; r = r[1:]
+    else:
+        sym = ctx.get("symbol"); tf = ctx.get("tf")
+    if not ensure_ctx(ctx, not sym, not tf):
+        return None
+    if not r:
+        print("uso: attach ea [SYMBOL] [TF] NAME [-- k=v ...]")
+        return None
+    params_tokens = []
+    debug_flag = False
+    if "--debug" in r:
+        debug_flag = True
+        r = [t for t in r if t != "--debug"]
+    if "--" in r:
+        idx = r.index("--")
+        params_tokens = r[idx+1:]
+        r = r[:idx]
+    else:
+        for i, tok in enumerate(r):
+            if "=" in tok and not tok.lower().startswith("sub="):
+                params_tokens = r[i:]
+                r = r[:i]
+                break
+    name = " ".join(r)
+    params_str = ";".join(params_tokens) if params_tokens else ""
+    return "ATTACH_EA_SMART", [sym, tf, name, params_str, "1" if debug_flag else ""]
+
+def _cmd_detachea_args(r, ctx):
+    return "DETACH_EA_FULL", list(r)
+
+def _cmd_runscript_args(r, ctx):
+    r = list(r)
+    tpl = r[-1] if r else ""
+    if not tpl:
+        print("uso: attach run [SYMBOL] [TF] TEMPLATE")
+        return None
+    r = r[:-1]
+    sym, tf, _ = parse_sym_tf(r, ctx)
+    if not ensure_ctx(ctx, not sym, not tf):
+        return None
+    return "RUN_SCRIPT", [sym, tf, tpl]
+
 def parse_user_line(line: str, ctx):
     line_str = line.strip()
     try:
@@ -2965,8 +3109,6 @@ def parse_user_line(line: str, ctx):
             return "COMPILE_HERE", []
         if len(parts) >= 2 and parts[1].lower() in ("here",):
             return "COMPILE_HERE", []
-        if len(parts) >= 2 and parts[1].lower() in ("py","pyservice","python","pyservico"):
-            return "COMPILE_PYSERVICE", []
         if len(parts) >= 2 and parts[1].lower() in ("all","todos","ambos","services","servicos"):
             return "COMPILE_ALL", []
         if len(parts) < 2:
@@ -2987,6 +3129,11 @@ def parse_user_line(line: str, ctx):
     if head in ("start","iniciar","run") and len(parts) >= 2 and parts[1].lower() in ("service","servico"):
         target = " ".join(parts[2:]) if len(parts) >= 3 else ""
         return "SERVICE_START", [target]
+    if head in ("service","servico") and len(parts) >= 2 and parts[1].lower() in ("windows","window","janela","janelas","hwnd","uia"):
+        return "SERVICE_WINDOWS", []
+    if head in ("service","servico") and len(parts) >= 2 and parts[1].lower() in ("list","listar","ls"):
+        print("use: service windows  (lista janelas/HWND)")
+        return None
     if head in ("service","servico") and len(parts) >= 2 and parts[1].lower() in ("stop","parar"):
         target = " ".join(parts[2:]) if len(parts) >= 3 else ""
         return "SERVICE_STOP", [target]
@@ -3021,273 +3168,6 @@ def parse_user_line(line: str, ctx):
 
     if head in ("tester", "mt5tester", "testermt5"):
         return "TESTER_RUN", parts[1:]
-
-    if head in ("python", "py"):
-        if len(parts) < 2:
-            print("uso: python <build|service|bridge|server|cupy> ...")
-            return None
-        sub = parts[1].lower()
-        rest = parts[2:]
-
-        if sub in ("ping", "ensure", "status"):
-            target, args0 = _pop_py_target(rest, default="pyout")
-            if target == "cupy":
-                host, port = _parse_host_port(args0, DEFAULT_PYOUT_CUPY_HOSTS, DEFAULT_PYOUT_CUPY_PORT)
-                if sub == "ping":
-                    return "PYCUPY_PING", [host, str(port)]
-                if sub == "ensure":
-                    return "PYCUPY_ENSURE", [host, str(port)]
-                return "PYCUPY_STATUS", []
-            host, port = _parse_host_port(args0, DEFAULT_PY_BRIDGE_HOSTS, DEFAULT_PY_BRIDGE_PORT)
-            if sub == "ping":
-                return "PYOUT_PING", [host, str(port)]
-            if sub == "ensure":
-                return "PYOUT_ENSURE", [host, str(port)]
-            return "PYOUT_STATUS", []
-
-        if sub in ("start", "init", "iniciar"):
-            target, args0 = _pop_py_target(rest, default="pyout")
-            if args0 and args0[0].lower() == "all":
-                args = args0[1:]
-            elif len(args0) >= 2 and args0[0].lower() == "all" and args0[1].lower() in ("pyout","cupy"):
-                target = args0[1].lower()
-                args = args0[2:]
-            else:
-                print("uso: py start [pyout|cupy] all [host] [port] [workers|--workers N] [--cupy|--pyout]"); return None
-            if target == "cupy":
-                host, port = _parse_host_port(args, DEFAULT_PYOUT_CUPY_HOSTS, DEFAULT_PYOUT_CUPY_PORT)
-                return "PYCUPY_RESTART", [host, str(port)]
-            host, port, workers = _parse_host_port_workers(args, DEFAULT_PY_BRIDGE_HOSTS, DEFAULT_PY_BRIDGE_PORT, DEFAULT_PYOUT_WORKERS)
-            return "PY_START_ALL", [host, str(port), str(workers)]
-
-        if sub in ("service", "svc", "pyservice"):
-            if len(rest) < 1:
-                print("uso: python service <ping|cmd|raw|compile> [args...]"); return None
-            action = rest[0].lower()
-            args = rest[1:]
-            if action == "compile":
-                return "COMPILE_PYSERVICE", []
-            if action in ("ping","status"):
-                host, port = _parse_host_port(args, DEFAULT_PY_SERVICE_HOSTS, DEFAULT_PY_SERVICE_PORT)
-                return "PYSERVICE_PING", [host, str(port)]
-            if action == "raw" and len(args) >= 1:
-                return "PYSERVICE_RAW", [" ".join(args)]
-            if action == "cmd" and len(args) >= 1:
-                return "PYSERVICE_CMD", [args[0].upper()] + args[1:]
-            print("uso: python service <ping|cmd|raw|compile> [args...]"); return None
-
-        if sub in ("server", "srv", "servidor", "pyout", "pyserver"):
-            if len(rest) < 1:
-                print("uso: py server [pyout|cupy] <up|down|status|ping|autostart|ensure|serve|all> [host] [port] [workers|--workers N] [--cupy|--pyout]"); return None
-            target, rest2 = _pop_py_target(rest, default="pyout")
-            if len(rest2) < 1:
-                print("uso: py server [pyout|cupy] <up|down|status|ping|autostart|ensure|serve|all> [host] [port] [workers|--workers N] [--cupy|--pyout]"); return None
-            action = rest2[0].lower()
-            args = rest2[1:]
-            if target == "cupy":
-                if action in ("up", "start"):
-                    host, port = _parse_host_port(args, DEFAULT_PYOUT_CUPY_HOSTS, DEFAULT_PYOUT_CUPY_PORT)
-                    return "PYCUPY_UP", [host, str(port)]
-                if action in ("down", "stop"):
-                    return "PYCUPY_DOWN", []
-                if action == "status":
-                    return "PYCUPY_STATUS", []
-                if action in ("serve", "run", "fg"):
-                    host, port = _parse_host_port(args, DEFAULT_PYOUT_CUPY_HOSTS, DEFAULT_PYOUT_CUPY_PORT)
-                    return "PYCUPY_SERVE", [host, str(port)]
-                if action in ("ping",):
-                    host, port = _parse_host_port(args, DEFAULT_PYOUT_CUPY_HOSTS, DEFAULT_PYOUT_CUPY_PORT)
-                    return "PYCUPY_PING", [host, str(port)]
-                if action in ("ensure", "autostart", "auto"):
-                    host, port = _parse_host_port(args, DEFAULT_PYOUT_CUPY_HOSTS, DEFAULT_PYOUT_CUPY_PORT)
-                    return "PYCUPY_ENSURE", [host, str(port)]
-                if action in ("all", "restart", "reset"):
-                    host, port = _parse_host_port(args, DEFAULT_PYOUT_CUPY_HOSTS, DEFAULT_PYOUT_CUPY_PORT)
-                    return "PYCUPY_RESTART", [host, str(port)]
-                print("uso: py server cupy <up|down|status|ping|ensure|serve|all> [host] [port]"); return None
-
-            if action in ("up", "start"):
-                host, port, workers = _parse_host_port_workers(args, DEFAULT_PY_BRIDGE_HOSTS, DEFAULT_PY_BRIDGE_PORT, DEFAULT_PYOUT_WORKERS)
-                return "PYOUT_UP", [host, str(port), str(workers)]
-            if action in ("down", "stop"):
-                return "PYOUT_DOWN", []
-            if action == "status":
-                return "PYOUT_STATUS", []
-            if action in ("serve", "run", "fg"):
-                host, port, workers = _parse_host_port_workers(args, DEFAULT_PY_BRIDGE_HOSTS, DEFAULT_PY_BRIDGE_PORT, DEFAULT_PYOUT_WORKERS)
-                return "PYOUT_SERVE", [host, str(port), str(workers)]
-            if action in ("ping",):
-                host, port = _parse_host_port(args, DEFAULT_PY_BRIDGE_HOSTS, DEFAULT_PY_BRIDGE_PORT)
-                return "PYOUT_PING", [host, str(port)]
-            if action in ("ensure", "autostart", "auto"):
-                host, port = _parse_host_port(args, DEFAULT_PY_BRIDGE_HOSTS, DEFAULT_PY_BRIDGE_PORT)
-                return "PYOUT_ENSURE", [host, str(port)]
-            if action in ("all", "restart", "reset"):
-                host, port, workers = _parse_host_port_workers(args, DEFAULT_PY_BRIDGE_HOSTS, DEFAULT_PY_BRIDGE_PORT, DEFAULT_PYOUT_WORKERS)
-                return "PY_START_ALL", [host, str(port), str(workers)]
-            print("uso: py server <up|down|status|ping|autostart|ensure|serve|all> [host] [port] [workers|--workers N]"); return None
-
-        if sub in ("bridge", "pybridge"):
-            if len(rest) < 1:
-                print("uso: python bridge <start|stop|status|ping|ensure> [host] [port]"); return None
-            action = rest[0].lower()
-            args = rest[1:]
-            if action == "start":
-                return "PYBRIDGE_START", []
-            if action == "stop":
-                return "PYBRIDGE_STOP", []
-            if action == "status":
-                return "PYBRIDGE_STATUS", []
-            if action in ("ping","ensure"):
-                host, port = _parse_host_port(args, DEFAULT_PY_BRIDGE_HOSTS, DEFAULT_PY_BRIDGE_PORT)
-                return ("PYBRIDGE_ENSURE" if action=="ensure" else "PYBRIDGE_PING", [host, str(port)])
-            print("uso: python bridge <start|stop|status|ping|ensure> [host] [port]"); return None
-
-        if sub in ("cupy", "pycupy", "pyout_cupy"):
-            if len(rest) < 1:
-                print("uso: python cupy <up|down|status|ping|ensure|serve> [host] [port]"); return None
-            action = rest[0].lower()
-            args = rest[1:]
-            if action in ("up", "start"):
-                host, port = _parse_host_port(args, DEFAULT_PYOUT_CUPY_HOSTS, DEFAULT_PYOUT_CUPY_PORT)
-                return "PYCUPY_UP", [host, str(port)]
-            if action in ("down", "stop"):
-                return "PYCUPY_DOWN", []
-            if action == "status":
-                return "PYCUPY_STATUS", []
-            if action in ("serve", "run", "fg"):
-                host, port = _parse_host_port(args, DEFAULT_PYOUT_CUPY_HOSTS, DEFAULT_PYOUT_CUPY_PORT)
-                return "PYCUPY_SERVE", [host, str(port)]
-            if action in ("ping",):
-                host, port = _parse_host_port(args, DEFAULT_PYOUT_CUPY_HOSTS, DEFAULT_PYOUT_CUPY_PORT)
-                return "PYCUPY_PING", [host, str(port)]
-            if action in ("ensure", "autostart", "auto"):
-                host, port = _parse_host_port(args, DEFAULT_PYOUT_CUPY_HOSTS, DEFAULT_PYOUT_CUPY_PORT)
-                return "PYCUPY_ENSURE", [host, str(port)]
-            print("uso: python cupy <up|down|status|ping|ensure|serve> [host] [port]"); return None
-
-        if sub in ("build", "scaffold"):
-            if not rest:
-                print("uso: python build -i NOME [--buffers N]"); return None
-            mode = None
-            buffers = 1
-            pos = []
-            i = 0
-            while i < len(rest):
-                tok = rest[i]
-                low = tok.lower()
-                if low in ("-i", "--indicator", "--ind"):
-                    mode = "ind"
-                    i += 1
-                    continue
-                if low in ("--buffers", "-b"):
-                    if i + 1 >= len(rest):
-                        print("uso: python build -i NOME [--buffers N]"); return None
-                    try:
-                        buffers = int(rest[i + 1])
-                    except Exception:
-                        print("erro: --buffers requer numero"); return None
-                    i += 2
-                    continue
-                if tok.startswith("-"):
-                    print("uso: python build -i NOME [--buffers N]"); return None
-                pos.append(tok)
-                i += 1
-            if mode != "ind":
-                print("uso: python build -i NOME [--buffers N]"); return None
-            # scaffold único: stfft
-            template = "stfft"
-            name = ""
-            if pos:
-                # aceita "stfft" apenas por compatibilidade; não é necessário
-                if pos[0].lower() in ("stfft", "stft"):
-                    name = " ".join(pos[1:]).strip() or ""
-                else:
-                    name = " ".join(pos).strip()
-            if not name:
-                name = template
-            return "IND_STFFT", [name, str(buffers)]
-
-        print("uso: python <build|service|bridge|server> ...")
-        return None
-
-    if head in ("legacy", "leg"):
-        if len(parts) < 2:
-            print("uso: legacy <pyservice|pybridge|ind> ...")
-            return None
-        sub = parts[1].lower()
-        rest = parts[2:]
-
-        if sub in ("pyservice", "pysvc", "pyserv"):
-            if len(rest) < 1:
-                print("uso: legacy pyservice <ping|cmd|raw|compile> [args...]"); return None
-            action = rest[0].lower()
-            args = rest[1:]
-            if action == "compile":
-                return "COMPILE_PYSERVICE", []
-            if action in ("ping","status"):
-                host, port = _parse_host_port(args, DEFAULT_PY_SERVICE_HOSTS, DEFAULT_PY_SERVICE_PORT)
-                return "PYSERVICE_PING", [host, str(port)]
-            if action == "raw" and len(args) >= 1:
-                return "PYSERVICE_RAW", [" ".join(args)]
-            if action == "cmd" and len(args) >= 1:
-                return "PYSERVICE_CMD", [args[0].upper()] + args[1:]
-            print("uso: legacy pyservice <ping|cmd|raw|compile> [args...]"); return None
-
-        if sub in ("pybridge", "pyb"):
-            if len(rest) < 1:
-                print("uso: legacy pybridge <start|stop|status|ping|ensure> [host] [port]"); return None
-            action = rest[0].lower()
-            args = rest[1:]
-            if action == "start":
-                return "PYBRIDGE_START", []
-            if action == "stop":
-                return "PYBRIDGE_STOP", []
-            if action == "status":
-                return "PYBRIDGE_STATUS", []
-            if action in ("ping","ensure"):
-                host, port = _parse_host_port(args, DEFAULT_PY_BRIDGE_HOSTS, DEFAULT_PY_BRIDGE_PORT)
-                return ("PYBRIDGE_ENSURE" if action=="ensure" else "PYBRIDGE_PING", [host, str(port)])
-            print("uso: legacy pybridge <start|stop|status|ping|ensure> [host] [port]"); return None
-
-        if sub in ("ind", "indicator"):
-            if len(rest) < 1:
-                print("uso: legacy ind NOME [--buffers N]")
-                return None
-            buffers = 1
-            name_tokens = []
-            i = 0
-            while i < len(rest):
-                tok = rest[i]
-                low = tok.lower()
-                if low in ("stfft", "stft", "-stfft", "--stfft", "-stft", "--stft"):
-                    # compat: ignore (não é mais obrigatório)
-                    i += 1
-                    continue
-                if low in ("--buffers", "-b"):
-                    if i + 1 >= len(rest):
-                        print("uso: legacy ind NOME [--buffers N]")
-                        return None
-                    try:
-                        buffers = int(rest[i + 1])
-                    except Exception:
-                        print("erro: --buffers requer numero")
-                        return None
-                    i += 2
-                    continue
-                if tok.startswith("-"):
-                    print("uso: legacy ind NOME [--buffers N]")
-                    return None
-                name_tokens.append(tok)
-                i += 1
-            name = " ".join(name_tokens).strip()
-            if not name:
-                print("uso: legacy ind NOME [--buffers N]")
-                return None
-            return "IND_STFFT", [name, str(buffers)]
-
-        print("uso: legacy <pyservice|pybridge|ind> ...")
-        return None
 
     # Chart commands: "chart open symbol tf", "chart close", "chart list", "chart add ind/ea/tpl ..."
     if head == "chart":
@@ -3331,12 +3211,12 @@ def parse_user_line(line: str, ctx):
                 name_tokens = rest[1:]
                 if len(name_tokens) == 0:
                     print("uso: chart add ind [SYMBOL] [TF] NAME [SUB]"); return None
-                return parse_user_line("attachind " + " ".join(name_tokens), ctx)
+                return _cmd_attachind_args(name_tokens, ctx)
             if what in ("ea","expert"):
                 ea_tokens = rest[1:]
                 if len(ea_tokens) == 0:
                     print("uso: chart add ea [SYMBOL] [TF] NAME"); return None
-                return parse_user_line("attachea " + " ".join(ea_tokens), ctx)
+                return _cmd_attachea_args(ea_tokens, ctx)
             if what in ("tpl","template"):
                 tpl_tokens = rest[1:]
                 if len(tpl_tokens) == 0:
@@ -3449,9 +3329,6 @@ def parse_user_line(line: str, ctx):
         "objmove":"obj_move","objcreate":"obj_create",
         "gs":"gset","gg":"gget","gd":"gdel","gdp":"gdelprefix","gl":"glist",
         "dbg":"debug",
-        "dea":"detachea",
-        "adicionar":"attachind",
-        "remover":"detachind",
         "mt5compile":"compile",
         "comp":"compile",
         "compile_service":"compile",
@@ -3465,102 +3342,147 @@ def parse_user_line(line: str, ctx):
 
     if cmd == "help":
         print(
-            "\nComandos:\n"
-            "  ping | debug MSG\n"
-            "  use SYMBOL TF                (define contexto padrão)\n"
-            "  ctx                          (mostra contexto)\n"
-            "  open [SYMBOL] [TF]           (ex: open BTCUSD H1)\n"
-            "  charts                       (lista charts abertos)\n"
-            "  closechart [SYMBOL] [TF]\n"
-            "  closeall\n"
-            "  redraw [SYMBOL] [TF]         (ChartRedraw)\n"
-            "  detachall [SYMBOL] [TF]      (remove indicadores de todas janelas)\n"
-            "  windowfind [SYMBOL] [TF] NAME\n"
-            "  applytpl [SYMBOL] [TF] TEMPLATE\n"
-            "  savetpl [SYMBOL] [TF] TEMPLATE\n"
-            "  savetplea EA OUT_TPL [BASE_TPL] [k=v;...]\n"
-            "  attachind [SYMBOL] [TF] NAME [SUB|sub=N] [k=v ...] [-- k=v ...]\n"
-            "  detachind [SYMBOL] [TF] NAME [SUB|sub=N]\n"
-            "  indtotal [SYMBOL] [TF] [SUB]\n"
-            "  indname [SYMBOL] [TF] [SUB] INDEX\n"
-            "  indhandle [SYMBOL] [TF] [SUB] NAME\n"
-            "  indget [SYMBOL] [TF] [SUB] SHORTNAME\n"
-            "  indrelease HANDLE\n"
-            "  findea NOME\n"
-            "  attachea [SYMBOL] [TF] NAME [k=v ...] [-- k=v ...] [--debug]\n"
-            "  detachea\n"
-            "  runscript [SYMBOL] [TF] TEMPLATE\n"
-            "  buy [SYMBOL] LOTS [sl] [tp]  (sl/tp são preços, opcional)\n"
-            "  sell [SYMBOL] LOTS [sl] [tp]\n"
-            "  positions                    (lista posições)\n"
-            "  tcloseall|closepos           (fecha todas posições)\n"
-            "  gset NAME VALUE | gget NAME | gdel NAME\n"
-            "  gdelprefix PREFIX | glist [PREFIX [LIMIT]]\n"
-            "  listinputs                   (últimos params de ind/ea)\n"
-            "  setinput NAME VAL            (reaplica último ind/ea)\n"
-            "  snapshot_save NAME | snapshot_apply NAME | snapshot_list\n"
-            "  chartsavetpl CHART_ID NAME   (ChartSaveTemplate no chart)\n"
-            "  obj_list [PREFIX]\n"
-            "  obj_delete NAME | obj_delete_prefix PREFIX\n"
-            "  obj_move NAME TIME PRICE [INDEX]\n"
-            "  obj_create TYPE NAME TIME PRICE TIME2 PRICE2\n"
-            "  screenshot SYMBOL TF FILE WIDTH [HEIGHT]\n"
-            "  screenshot_sweep ... | drop_info ...\n"
-            "  py PAYLOAD                   (PY_CALL)\n"
-            "  py start all [host] [port] [workers|--workers N]  (reinicia PyOut fora do MT5; host lista -> bind 0.0.0.0)\n"
-            "  py server all [host] [port] [workers|--workers N] (reinicia PyOut fora do MT5; host lista -> bind 0.0.0.0)\n"
-            "  py start [pyout|cupy] all [host] [port] [workers|--workers N]\n"
-            "  py server [pyout|cupy] <up|down|status|ping|ensure|serve|all> [host] [port] [workers|--workers N] [--cupy|--pyout]\n"
-            "  py cupy <up|down|status|ping|ensure|serve> [host] [port]\n"
-            "  py ping|ensure|status [--cupy|--pyout] [host] [port]\n"
-            "  compile ARQUIVO|NOME         (compila .mq5 via MetaEditor)\n"
-            "  compile service NOME         (compila em MQL5/Services)\n"
-            "  service compile NOME         (alias)\n"
-            "  compile here                 (compila SocketTelnetService.mq5)\n"
-            "  service start NOME           (automation: inicia serviço no MT5)\n"
-            "  service stop NOME            (automation: para serviço no MT5)\n"
-            "  compile pyservice            (compila PyInServerService.mq5)\n"
-            "  compile all                  (compila SocketTelnetService + PyInServerService)\n"
-            "  python service <ping|cmd|raw|compile> [args...]  (PyIn 9091)\n"
-            "  py server <up|down|status|ping|autostart|ensure|serve> [host] [port] [workers|--workers N]  (delegado ao pyout_cli)\n"
-            "  python bridge <start|stop|status|ping|ensure> [host] [port]  (delegado ao pyout_cli)\n"
-            "  python cupy <up|down|status|ping|ensure|serve> [host] [port]  (delegado ao pyout_cupy_cli)\n"
-            "  python build -i NOME [--buffers N]   (scaffold STFFT)\n"
-            "  legacy pyservice <ping|cmd|raw|compile> [args...]\n"
-            "  legacy pybridge <start|stop|status|ping|ensure> [host] [port]\n"
-            "  legacy ind NOME [--buffers N]\n"
-            "  hotkeys                       (lista hotkeys e uso)\n"
-            "  cmd+hotkeys                   (lista + exemplo)\n"
-            "  hotkey save NOME \"CMD; CMD\"  (salva sequência)\n"
-            "  hotkey run NOME | hotkey show NOME | hotkey del NOME\n"
-            "  hotkey <sequencia> [save NOME] (executa ou salva)\n"
-            "  digite NOME ou @NOME           (executa hotkey salva; '@' só no começo)\n"
-            "  ini set Section.Key=Valor      (salva defaults em Terminal/tester.ini)\n"
-            "  ini get Section.Key            (lê valor; Common.Password é mascarado)\n"
-            "  ini list                        (mostra ini inteiro; senha mascarada)\n"
-            "  ini sync                        (copia Common.* de Terminal/Config/common.ini)\n"
-            "  tester [--root PATH] [--ini FILE] [--timeout SEC] [--width W --height H]\n"
-            "         [--headless|--minimized] [--portable|--no-portable] [--logtail N|--log N] [--quiet]\n"
-            "         [--set Section.Key=Val ...] (ex: --set Tester.Expert=Examples\\\\MACD\\\\MACD Sample)\n"
-            "         (default size: 640x480, ShutdownTerminal=1)\n"
-            "  run CAMINHO --ind|--ea [SYMBOL] [TF] [3 dias] [--model N] [--timeout SEC] [--keep-open|--shutdown] [--predownload] [--predownload-period TF] [--predownload-days N] [--predownload-bars N] [--no-predownload] [--logtail N] [--quiet] (tester simples)\n"
-            "  logs [last|ARQUIVO.log] [N] (listar/mostrar logs do run)\n"
-            "  logs pyout|pyin|cupy [--server|--client] [--cupy|--pyout] [N] [filtro...] [--follow]\n"
-            "  cmd TYPE [PARAMS...]         (envia TYPE direto)\n"
-            "  PY_CONNECT | PY_DISCONNECT   (via cmd TYPE ...)\n"
-            "  PY_ARRAY_CALL [NAME]         (via cmd TYPE ...)\n"
-            "  selftest [full|compile]      (smoke test do serviço)\n"
-            "  raw <linha completa>         (envia como está)\n"
-            "  json <json inteiro>          (envia JSON bruto)\n"
-            "  quit\n"
+            "\nComandos (resumo):\n"
+            "  Básico: ping | debug MSG | use SYMBOL TF | ctx | help | exemplos [cmd]\n"
+            "  Charts: open [SYMBOL] [TF] | charts | closechart [SYMBOL] [TF] | closeall | redraw [SYMBOL] [TF] | detachall [SYMBOL] [TF] | windowfind [SYMBOL] [TF] NAME | drop_info\n"
+            "  Templates: applytpl [SYMBOL] [TF] TEMPLATE | savetpl [SYMBOL] [TF] TEMPLATE | chartsavetpl CHART_ID NAME | savetplea EA OUT_TPL [BASE_TPL] [k=v;...]\n"
+            "  Indicadores: attach (att) ind ... | deattach (dtt) ind ... | indtotal ... | indname ... | indhandle ... | indget ... | indrelease HANDLE\n"
+            "  Experts: attach (att) ea ... | deattach (dtt) ea ... | findea NOME\n"
+            "  Scripts: attach (att) run [SYMBOL] [TF] TEMPLATE\n"
+            "  Trades: buy [SYMBOL] LOTS [sl] [tp] | sell [SYMBOL] LOTS [sl] [tp] | positions | tcloseall|closepos\n"
+            "  Globais: gset NAME VALUE | gget NAME | gdel NAME | gdelprefix PREFIX | glist [PREFIX [LIMIT]]\n"
+            "  Inputs: listinputs | setinput NAME VAL\n"
+            "  Snapshot: snapshot_save NAME | snapshot_apply NAME | snapshot_list\n"
+            "  Objetos: obj_list [PREFIX] | obj_delete NAME | obj_delete_prefix PREFIX | obj_move NAME TIME PRICE [INDEX] | obj_create TYPE NAME TIME PRICE TIME2 PRICE2\n"
+            "  Screens: screenshot SYMBOL TF FILE WIDTH [HEIGHT] | screenshot_sweep ...\n"
+            "  Serviço: compile ARQUIVO|NOME | compile service NOME | compile here | compile all | service start NOME | service stop NOME\n"
+            "  Hotkeys: hotkeys | hotkey save NOME \"CMD; CMD\" | hotkey run NOME | hotkey show NOME | hotkey del NOME | hotkey <seq> [save NOME]\n"
+            "  INI: ini set/get/list/sync\n"
+            "  Tester: tester ... | run CAMINHO --ind|--ea ... | logs [last|ARQUIVO.log] [N]\n"
+            "  Outros: cmd TYPE [PARAMS...] | selftest [full|compile] | raw <linha> | json <json> | quit\n"
+            "\nComandos principais:\n"
+            "  attach (att) ind ... | attach (att) ea ... | attach (att) run ...\n"
+            "  deattach (dtt) ind ... | deattach (dtt) ea ...\n"
             "\nObs: default = EURUSD H1 (se não informar SYMBOL/TF)\n"
-            "Obs: ';' separa multiplos comandos. No modo nao-interativo use aspas SOMENTE com ';':\n"
-            "      python cmdmt.py \"open EURUSD H1; attachind ZigZag 1\"\n"
+            "Obs: ';' separa múltiplos comandos. No modo não-interativo use aspas SOMENTE com ';':\n"
+            "      python cmdmt.py \"open EURUSD H1; attach ind ZigZag 1\"\n"
         )
+        return None
+
+    if cmd == "exemplos":
+        topic = " ".join(parts[1:]).strip().lower()
+        if topic:
+            if topic in ("attach","att","anexar","ind","indicador","indicator","ea","expert","run","script","scr"):
+                print(
+                    "\nExemplos - attach:\n"
+                    "  attach ind EURUSD H1 ZigZag sub=1 depth=12 deviation=5 backstep=3\n"
+                    "  attach ind EURUSD H1 CustomInd sub=2 -- k1=v1 k2=v2\n"
+                    "  attach ea EURUSD H1 MyEA lot=0.1 --debug\n"
+                    "  attach run EURUSD H1 MyScript\n"
+                )
+                return None
+            if topic in ("deattach","dtt","detach","desanexar","remove","remover"):
+                print(
+                    "\nExemplos - deattach:\n"
+                    "  deattach ind EURUSD H1 ZigZag sub=1\n"
+                    "  deattach ind EURUSD H1 CustomInd sub=2\n"
+                    "  deattach ea EURUSD H1\n"
+                )
+                return None
+            if topic in ("tpl","template","templates","applytpl","savetpl"):
+                print(
+                    "\nExemplos - templates:\n"
+                    "  applytpl EURUSD H1 \"Moving Average\"\n"
+                    "  savetpl EURUSD H1 MinhaTemplate\n"
+                    "  chartsavetpl 123456 MinhaTemplate\n"
+                )
+                return None
+            if topic in ("snapshot","snap","screenshot","screen"):
+                print(
+                    "\nExemplos - snapshot/screen:\n"
+                    "  snapshot_save teste | snapshot_list | snapshot_apply teste\n"
+                    "  screenshot EURUSD H1 MQL5\\\\Files\\\\shot.png 1280 720\n"
+                )
+                return None
+            if topic in ("trade","buy","sell","positions","tcloseall"):
+                print(
+                    "\nExemplos - trades:\n"
+                    "  buy EURUSD 0.10 1.0900 1.1100\n"
+                    "  sell EURUSD 0.10 1.0900 1.1100\n"
+                    "  positions | tcloseall\n"
+                )
+                return None
+            if topic in ("service","compile","tester","run"):
+                print(
+                    "\nExemplos - serviço/tester:\n"
+                    "  compile service SocketTelnetService\n"
+                    "  compile here\n"
+                    "  service start SocketTelnetService\n"
+                )
+                return None
+        print(
+            "\nExemplos rápidos:\n"
+            "  ping\n"
+            "  use EURUSD H1\n"
+            "  open EURUSD H1\n"
+            "  charts\n"
+            "  attach ind EURUSD H1 ZigZag sub=1 depth=12 deviation=5 backstep=3\n"
+            "  deattach ind EURUSD H1 ZigZag sub=1\n"
+            "  attach ea EURUSD H1 MyEA lot=0.1\n"
+            "  attach run EURUSD H1 MyScript\n"
+            "  applytpl EURUSD H1 \"Moving Average\"\n"
+            "  snapshot_save teste | snapshot_list | snapshot_apply teste\n"
+            "  buy EURUSD 0.10 1.0900 1.1100\n"
+            "  tcloseall\n"
+            "  obj_create HLINE linha1 0 1.2345 0 0\n"
+            "  screenshot EURUSD H1 MQL5\\\\Files\\\\shot.png 1280 720\n"
+            "  compile service SocketTelnetService\n"
+            "\nDica: exemplos <cmd> (ex: exemplos attach)\n"
+        )
+        return None
+
+    if cmd in ("attachind","detachind","attachea","detachea","runscript","attach_ea"):
+        print("comando desativado: use attach/deattach (ex: attach ind ... | attach ea ... | attach run ...)")
         return None
 
     if cmd == "ping":
         return "PING", []
+    if cmd in ("attach","att"):
+        if len(parts) < 2:
+            print("uso: attach (att) ind|ea|run [SYMBOL] [TF] NOME [SUB|sub=N] [k=v ...]")
+            return None
+        sub = parts[1].lower()
+        if sub in ("ind","indicador","indicator","i"):
+            if len(parts) < 3:
+                print("uso: attach (att) ind [SYMBOL] [TF] NOME [SUB|sub=N] [k=v ...]")
+                return None
+            return _cmd_attachind_args(parts[2:], ctx)
+        if sub in ("ea","expert","e","robo","robot","advisor"):
+            if len(parts) < 3:
+                print("uso: attach (att) ea [SYMBOL] [TF] NOME [k=v ...]")
+                return None
+            return _cmd_attachea_args(parts[2:], ctx)
+        if sub in ("run","script","scr","s"):
+            if len(parts) < 3:
+                print("uso: attach (att) run [SYMBOL] [TF] TEMPLATE")
+                return None
+            return _cmd_runscript_args(parts[2:], ctx)
+        print("uso: attach (att) ind|ea|run [SYMBOL] [TF] NOME [SUB|sub=N] [k=v ...]")
+        return None
+    if cmd in ("deattach","dtt"):
+        if len(parts) < 2:
+            print("uso: deattach (dtt) ind|ea [SYMBOL] [TF] NOME [SUB|sub=N]")
+            return None
+        sub = parts[1].lower()
+        if sub in ("ind","indicador","indicator","i"):
+            if len(parts) < 3:
+                print("uso: deattach (dtt) ind [SYMBOL] [TF] NOME [SUB|sub=N]")
+                return None
+            return _cmd_detachind_args(parts[2:], ctx)
+        if sub in ("ea","expert","e","robo","robot","advisor"):
+            return _cmd_detachea_args(parts[2:], ctx)
+        print("uso: deattach (dtt) ind|ea [SYMBOL] [TF] NOME [SUB|sub=N]")
+        return None
     if cmd == "open":
         sym, tf, _ = parse_sym_tf(parts[1:], ctx)
         if not ensure_ctx(ctx, not sym, not tf):
@@ -3675,83 +3597,6 @@ def parse_user_line(line: str, ctx):
         return "WINDOW_FIND", [sym, tf, rem[0]]
     if cmd == "closeall":
         return "CLOSE_ALL", []
-    if cmd == "attachind" and len(parts) >= 2:
-        r = parts[1:]
-        # parse sym/tf only if explicit TF is provided or TF alone
-        sym = None; tf = None
-        if len(r) >= 2 and is_tf(r[1]):
-            sym = r[0]; tf = r[1]; r = r[2:]
-        elif len(r) >= 1 and is_tf(r[0]) and ctx.get("symbol"):
-            sym = ctx.get("symbol"); tf = r[0]; r = r[1:]
-        else:
-            # usa defaults; não interpreta o primeiro token como símbolo
-            sym = ctx.get("symbol"); tf = ctx.get("tf")
-        if not ensure_ctx(ctx, not sym, not tf): return None
-        if not r:
-            print("uso: attachind [SYMBOL] [TF] NAME [SUB|sub=N] [-- k=v ...]"); return None
-        # allow params after "--"
-        params_tokens = []
-        if "--" in r:
-            idx = r.index("--")
-            params_tokens = r[idx+1:]
-            r = r[:idx]
-        else:
-            for i, tok in enumerate(r):
-                if "=" in tok and not tok.lower().startswith("sub="):
-                    params_tokens = r[i:]
-                    r = r[:i]
-                    break
-        # explicit sub token
-        sub = str(ctx.get("sub", 1))
-        sub_idx = None
-        for i, tok in enumerate(r):
-            low = tok.lower()
-            if low.startswith("sub="):
-                sub = tok.split("=", 1)[1]; sub_idx = i; break
-            if (tok.startswith("@") or tok.startswith("#")) and tok[1:].isdigit():
-                sub = tok[1:]; sub_idx = i; break
-        if sub_idx is not None:
-            r = r[:sub_idx] + r[sub_idx+1:]
-        elif len(r) >= 2 and r[-1].isdigit():
-            # mantém compatibilidade com "NOME SUB"
-            sub = r[-1]; r = r[:-1]
-        elif len(r) == 1 and r[0].isdigit():
-            print("uso: attachind [SYMBOL] [TF] NAME [SUB|sub=N] [-- k=v ...]"); return None
-        name = " ".join(r)
-        params_str = ";".join(params_tokens) if params_tokens else ""
-        payload = [sym, tf, name, sub]
-        if params_str:
-            payload.append(params_str)
-        return "ATTACH_IND_FULL", payload
-    if cmd == "detachind" and len(parts) >= 2:
-        r = parts[1:]
-        sym = None; tf = None
-        if len(r) >= 2 and is_tf(r[1]):
-            sym = r[0]; tf = r[1]; r = r[2:]
-        elif len(r) >= 1 and is_tf(r[0]) and ctx.get("symbol"):
-            sym = ctx.get("symbol"); tf = r[0]; r = r[1:]
-        else:
-            # usa defaults; não interpreta o primeiro token como símbolo
-            sym = ctx.get("symbol"); tf = ctx.get("tf")
-        if not ensure_ctx(ctx, not sym, not tf): return None
-        if not r:
-            print("uso: detachind [SYMBOL] [TF] NAME [SUB|sub=N]"); return None
-        sub = str(ctx.get("sub", 1))
-        sub_idx = None
-        for i, tok in enumerate(r):
-            low = tok.lower()
-            if low.startswith("sub="):
-                sub = tok.split("=", 1)[1]; sub_idx = i; break
-            if (tok.startswith("@") or tok.startswith("#")) and tok[1:].isdigit():
-                sub = tok[1:]; sub_idx = i; break
-        if sub_idx is not None:
-            r = r[:sub_idx] + r[sub_idx+1:]
-        elif len(r) >= 2 and r[-1].isdigit():
-            sub = r[-1]; r = r[:-1]
-        elif len(r) == 1 and r[0].isdigit():
-            print("uso: detachind [SYMBOL] [TF] NAME [SUB|sub=N]"); return None
-        name = " ".join(r)
-        return "DETACH_IND_FULL", [sym, tf, name, sub]
     if cmd == "indtotal" and len(parts) >= 1:
         r = parts[1:]
         sub = str(ctx.get("sub",1))
@@ -3806,48 +3651,6 @@ def parse_user_line(line: str, ctx):
         if not chart_id.isdigit():
             print("uso: chartsavetpl CHART_ID NAME"); return None
         return "CHART_SAVE_TPL", [chart_id, name]
-    if cmd == "attachea" and len(parts) >= 2:
-        r = parts[1:]
-        sym = None; tf = None
-        if len(r) >= 2 and is_tf(r[1]):
-            sym = r[0]; tf = r[1]; r = r[2:]
-        elif len(r) >= 1 and is_tf(r[0]) and ctx.get("symbol"):
-            sym = ctx.get("symbol"); tf = r[0]; r = r[1:]
-        else:
-            sym = ctx.get("symbol"); tf = ctx.get("tf")
-        if not ensure_ctx(ctx, not sym, not tf): return None
-        if not r:
-            print("uso: attachea [SYMBOL] [TF] NAME [-- k=v ...]"); return None
-        params_tokens = []
-        debug_flag = False
-        if "--debug" in r:
-            debug_flag = True
-            r = [t for t in r if t != "--debug"]
-        if "--" in r:
-            idx = r.index("--")
-            params_tokens = r[idx+1:]
-            r = r[:idx]
-        else:
-            for i, tok in enumerate(r):
-                if "=" in tok and not tok.lower().startswith("sub="):
-                    params_tokens = r[i:]
-                    r = r[:i]
-                    break
-        name = " ".join(r)
-        params_str = ";".join(params_tokens) if params_tokens else ""
-        return "ATTACH_EA_SMART", [sym, tf, name, params_str, "1" if debug_flag else ""]
-    if cmd == "detachea":
-        return "DETACH_EA_FULL", parts[1:]
-    if cmd == "runscript" and len(parts) >= 2:
-        r = parts[1:]
-        tpl = r[-1] if r else ""
-        if not tpl:
-            print("uso: runscript [SYMBOL] [TF] TEMPLATE"); return None
-        r = r[:-1]
-        sym, tf, _ = parse_sym_tf(r, ctx)
-        if not ensure_ctx(ctx, not sym, not tf):
-            return None
-        return "RUN_SCRIPT", [sym, tf, tpl]
     if cmd == "gset" and len(parts) >= 3:
         return "GLOBAL_SET", [parts[1], parts[2]]
     if cmd == "gget" and len(parts) >= 2:
@@ -3865,14 +3668,9 @@ def parse_user_line(line: str, ctx):
     if cmd == "findea" and len(parts) >= 2:
         name = " ".join(parts[1:])
         return "FIND_EA", [name]
-    if cmd == "py" and len(parts) >= 2:
-        payload = " ".join(parts[1:])
-        return "PY_CALL", [payload]
     # aliases legado
     if cmd == "closetpl":
         return parse_user_line("closechart " + " ".join(parts[1:]), ctx)
-    if cmd == "attach_ea":
-        return parse_user_line("attachea " + " ".join(parts[1:]), ctx)
     if cmd == "listinputs":
         return "LIST_INPUTS", parts[1:]
     if cmd == "setinput":
@@ -4276,7 +4074,7 @@ def main():
                 if params and params[0] == "full":
                     print("")
                     print("Exemplo:")
-                    print("  hotkey save salvar \"open EURUSD H1; attachind ZigZag 1\"")
+                    print("  hotkey save salvar \"open EURUSD H1; attach ind ZigZag 1\"")
                     print("  salvar")
                 return
             if cmd_type == "HOTKEY_LIST":
@@ -4360,9 +4158,6 @@ def main():
                 target = params[0] if params else ""
                 run_mt5_compile_service_name(target)
                 return
-            if cmd_type == "COMPILE_PYSERVICE":
-                run_mt5_compile_pyservice()
-                return
             if cmd_type == "COMPILE_ALL":
                 run_mt5_compile_all_services()
                 return
@@ -4374,48 +4169,13 @@ def main():
                 target = params[0] if params else ""
                 run_mt5_stop_service(target)
                 return
+            if cmd_type == "SERVICE_WINDOWS":
+                run_mt5_list_service_windows()
+                return
             if cmd_type == "RUN_SIMPLE":
                 run_simple(params, ctx)
                 return
             if cmd_type == "RUN_LOGS":
-                if params and params[0].lower() in ("pyout", "pyin", "cupy"):
-                    target = params[0].lower()
-                    target_variant, rest = _pop_py_target(params[1:], default="pyout")
-                    mode = None
-                    tail = 200
-                    follow = False
-                    filters = []
-                    for tok in rest:
-                        low = tok.lower()
-                        if low in ("--server", "server", "-s"):
-                            mode = "server"
-                            continue
-                        if low in ("--client", "client", "-c"):
-                            mode = "client"
-                            continue
-                        if low in ("--follow", "--tail", "-f"):
-                            follow = True
-                            continue
-                        if tok.isdigit():
-                            tail = int(tok)
-                            continue
-                        filters.append(tok)
-                    mode = mode or "server"
-                    if target == "cupy":
-                        _show_cupy_logs(mode, tail, filters or None, follow=follow)
-                        return
-                    if target == "pyout":
-                        if target_variant == "cupy":
-                            _show_cupy_logs(mode, tail, filters or None, follow=follow)
-                        else:
-                            _show_pyout_logs(mode, tail, filters or None, follow=follow)
-                        return
-                    # pyin
-                    if target_variant == "cupy":
-                        _show_cupy_logs("client", tail, filters or None, follow=follow)
-                    else:
-                        _show_pyin_logs(mode, tail, filters or None, follow=follow)
-                    return
                 if not params:
                     _list_run_logs()
                 else:
@@ -4425,143 +4185,6 @@ def main():
                 return
             if cmd_type == "TESTER_RUN":
                 run_mt5_tester(params)
-                return
-            if cmd_type == "PYSERVICE_PING":
-                host = params[0] if params else DEFAULT_PY_SERVICE_HOSTS
-                port = int(params[1]) if len(params) >= 2 else DEFAULT_PY_SERVICE_PORT
-                _run_pyin_cli(["--host", host, "--port", str(port), "--timeout", str(args.timeout), "ping"])
-                return
-            if cmd_type == "PYSERVICE_CMD":
-                if not params:
-                    print("uso: pyservice cmd TYPE [PARAMS...]")
-                    return
-                host = DEFAULT_PY_SERVICE_HOSTS
-                port = DEFAULT_PY_SERVICE_PORT
-                _run_pyin_cli(["--host", host, "--port", str(port), "--timeout", str(args.timeout), "cmd", params[0]] + params[1:])
-                return
-            if cmd_type == "PYSERVICE_RAW":
-                if not params:
-                    print("uso: pyservice raw LINE")
-                    return
-                host = DEFAULT_PY_SERVICE_HOSTS
-                port = DEFAULT_PY_SERVICE_PORT
-                _run_pyin_cli(["--host", host, "--port", str(port), "--timeout", str(args.timeout), "raw", params[0]])
-                return
-            if cmd_type == "PYBRIDGE_START":
-                pybridge_start()
-                return
-            if cmd_type == "PYBRIDGE_STOP":
-                pybridge_stop()
-                return
-            if cmd_type == "PYBRIDGE_STATUS":
-                pybridge_status()
-                return
-            if cmd_type == "PYBRIDGE_PING":
-                host = params[0] if params else DEFAULT_PY_BRIDGE_HOSTS
-                port = int(params[1]) if len(params) >= 2 else DEFAULT_PY_BRIDGE_PORT
-                _run_pyout_cli(["ping", "--host", host, "--port", str(port)])
-                return
-            if cmd_type == "PYBRIDGE_ENSURE":
-                host = params[0] if params else DEFAULT_PY_BRIDGE_HOSTS
-                port = int(params[1]) if len(params) >= 2 else DEFAULT_PY_BRIDGE_PORT
-                _run_pyout_cli(["ensure", "--host", host, "--port", str(port)])
-                return
-            if cmd_type == "PYOUT_UP":
-                host = params[0] if params else DEFAULT_PY_BRIDGE_HOSTS
-                port = int(params[1]) if len(params) >= 2 else DEFAULT_PY_BRIDGE_PORT
-                workers = int(params[2]) if len(params) >= 3 else DEFAULT_PYOUT_WORKERS
-                bind_host = _pyout_bind_host(host)
-                _run_pyout_cli(["up", "--host", bind_host, "--port", str(port), "--workers", str(workers)])
-                return
-            if cmd_type == "PYOUT_DOWN":
-                _run_pyout_cli(["down"])
-                return
-            if cmd_type == "PYOUT_STATUS":
-                _run_pyout_cli(["status"])
-                return
-            if cmd_type == "PYOUT_SERVE":
-                host = params[0] if params else DEFAULT_PY_BRIDGE_HOSTS
-                port = int(params[1]) if len(params) >= 2 else DEFAULT_PY_BRIDGE_PORT
-                workers = int(params[2]) if len(params) >= 3 else DEFAULT_PYOUT_WORKERS
-                bind_host = _pyout_bind_host(host)
-                _run_pyout_cli(["run", "--host", bind_host, "--port", str(port), "--workers", str(workers)])
-                return
-            if cmd_type == "PYOUT_PING":
-                host = params[0] if params else DEFAULT_PY_BRIDGE_HOSTS
-                port = int(params[1]) if len(params) >= 2 else DEFAULT_PY_BRIDGE_PORT
-                _run_pyout_cli(["ping", "--host", host, "--port", str(port)])
-                return
-            if cmd_type == "PYOUT_ENSURE":
-                host = params[0] if params else DEFAULT_PY_BRIDGE_HOSTS
-                port = int(params[1]) if len(params) >= 2 else DEFAULT_PY_BRIDGE_PORT
-                _run_pyout_cli(["ensure", "--host", host, "--port", str(port)])
-                return
-            if cmd_type == "PYCUPY_UP":
-                host = params[0] if params else DEFAULT_PYOUT_CUPY_HOSTS
-                port = int(params[1]) if len(params) >= 2 else DEFAULT_PYOUT_CUPY_PORT
-                _run_pyout_cupy_cli(["up", "--host", host, "--port", str(port)])
-                return
-            if cmd_type == "PYCUPY_DOWN":
-                _run_pyout_cupy_cli(["down"])
-                return
-            if cmd_type == "PYCUPY_STATUS":
-                _run_pyout_cupy_cli(["status"])
-                return
-            if cmd_type == "PYCUPY_SERVE":
-                host = params[0] if params else DEFAULT_PYOUT_CUPY_HOSTS
-                port = int(params[1]) if len(params) >= 2 else DEFAULT_PYOUT_CUPY_PORT
-                _run_pyout_cupy_cli(["run", "--host", host, "--port", str(port)])
-                return
-            if cmd_type == "PYCUPY_PING":
-                host = params[0] if params else DEFAULT_PYOUT_CUPY_HOSTS
-                port = int(params[1]) if len(params) >= 2 else DEFAULT_PYOUT_CUPY_PORT
-                _run_pyout_cupy_cli(["ping", "--host", host, "--port", str(port)])
-                return
-            if cmd_type == "PYCUPY_ENSURE":
-                host = params[0] if params else DEFAULT_PYOUT_CUPY_HOSTS
-                port = int(params[1]) if len(params) >= 2 else DEFAULT_PYOUT_CUPY_PORT
-                _run_pyout_cupy_cli(["ensure", "--host", host, "--port", str(port)])
-                return
-            if cmd_type == "PYCUPY_RESTART":
-                host = params[0] if params else DEFAULT_PYOUT_CUPY_HOSTS
-                port = int(params[1]) if len(params) >= 2 else DEFAULT_PYOUT_CUPY_PORT
-                _run_pyout_cupy_cli_verbose(["down"])
-                _run_pyout_cupy_cli_verbose(["up", "--host", host, "--port", str(port)])
-                print("OK pyout_cupy reiniciado (fora do MT5)")
-                return
-            if cmd_type == "PY_START_ALL":
-                host = params[0] if params else DEFAULT_PY_BRIDGE_HOSTS
-                port = int(params[1]) if len(params) >= 2 else DEFAULT_PY_BRIDGE_PORT
-                workers = int(params[2]) if len(params) >= 3 else DEFAULT_PYOUT_WORKERS
-                bind_host = _pyout_bind_host(host)
-                _run_pyout_cli_verbose(["down"])
-                _run_pyout_cli_verbose(["up", "--host", bind_host, "--port", str(port), "--workers", str(workers)])
-                print("OK pyout reiniciado (fora do MT5)")
-                return
-            if cmd_type == "IND_STFFT":
-                name = params[0] if params else ""
-                buffers = int(params[1]) if len(params) >= 2 and str(params[1]).lstrip("-").isdigit() else 1
-                term = find_terminal_data_dir()
-                if not term:
-                    print("ERROR terminal_dir (defina CMDMT_MT5_DATA)")
-                    return
-                target = _resolve_new_mq5_path(name, term)
-                if not target:
-                    print("ERROR nome inválido")
-                    return
-                svc_mqh = term / "MQL5" / "Services" / "PyInService" / "PyInClient.mqh"
-                if not svc_mqh.exists():
-                    print("ERROR PyInClient.mqh não encontrado")
-                    return
-                if target.exists() and not _is_blank_text_file(target):
-                    print("ERROR arquivo não está em branco (use outro nome)")
-                    return
-                target.parent.mkdir(parents=True, exist_ok=True)
-                include_rel = _rel_include_path(target.parent, svc_mqh)
-                content = _stfft_indicator_stub(target.stem, buffers, include_rel)
-                target.write_text(content, encoding="utf-8", errors="ignore", newline="\n")
-                print("OK stfft scaffold")
-                print("  " + str(target))
                 return
             if cmd_type == "RAW":
                 payload = params[0]
